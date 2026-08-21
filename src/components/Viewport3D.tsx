@@ -1,0 +1,764 @@
+import React, { useEffect, useRef } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import {
+  LoadedModel,
+  TransformValues,
+  GizmoMode,
+  TransformSpace,
+  LightingPreset,
+  RenderMode,
+  CameraView,
+} from '../types';
+
+interface Viewport3DProps {
+  models: LoadedModel[];
+  selectedModelId: string | null;
+  transformValues: TransformValues;
+  gizmoMode: GizmoMode;
+  transformSpace: TransformSpace;
+  lightingPreset: LightingPreset;
+  lightIntensity: number;
+  bgColor: string;
+  renderMode: RenderMode;
+  showGrid: boolean;
+  showAxes: boolean;
+  pointSize: number;
+  autoRotate: boolean;
+  rotateSpeed: number;
+  showBBox: boolean;
+  activeAnimIndex: number;
+  isAnimPlaying: boolean;
+  animSpeed: number;
+  onSelectModel: (id: string | null) => void;
+  onTransformChange: (values: Partial<TransformValues>) => void;
+  onFpsUpdate?: (fps: number) => void;
+  cameraQuaternionRef?: React.MutableRefObject<THREE.Quaternion>;
+}
+
+export interface ViewportHandle {
+  focusModel: (id?: string) => void;
+  focusAll: () => void;
+  setCameraView: (view: CameraView) => void;
+  captureScreenshot: () => string;
+}
+
+export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
+  (
+    {
+      models,
+      selectedModelId,
+      transformValues,
+      gizmoMode,
+      transformSpace,
+      lightingPreset,
+      lightIntensity,
+      bgColor,
+      renderMode,
+      showGrid,
+      showAxes,
+      pointSize,
+      autoRotate,
+      rotateSpeed,
+      showBBox,
+      activeAnimIndex,
+      isAnimPlaying,
+      animSpeed,
+      onSelectModel,
+      onTransformChange,
+      onFpsUpdate,
+      cameraQuaternionRef,
+    },
+    ref
+  ) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    // Camera target position transition ref
+    const targetCameraPos = useRef<THREE.Vector3 | null>(null);
+    const targetControlsTarget = useRef<THREE.Vector3 | null>(null);
+
+    // Three.js instances ref
+    const threeRef = useRef<{
+      scene: THREE.Scene;
+      camera: THREE.PerspectiveCamera;
+      renderer: THREE.WebGLRenderer;
+      controls: OrbitControls;
+      transformControls: TransformControls;
+      gridHelper: THREE.GridHelper;
+      axesHelper: THREE.AxesHelper;
+      bboxHelper: THREE.BoxHelper | null;
+      ambientLight: THREE.AmbientLight;
+      hemiLight: THREE.HemisphereLight;
+      dirLight: THREE.DirectionalLight;
+      dirLight2: THREE.DirectionalLight;
+      mixer: THREE.AnimationMixer | null;
+      currentAction: THREE.AnimationAction | null;
+      clock: THREE.Clock;
+      originalMaterials: Map<string, THREE.Material | THREE.Material[]>;
+      pointerDownPos: { x: number; y: number };
+      frameCount: number;
+      lastTime: number;
+    } | null>(null);
+
+    // Stable references to props
+    const propsRef = useRef({
+      models,
+      selectedModelId,
+      gizmoMode,
+      transformSpace,
+      onSelectModel,
+      onTransformChange,
+      autoRotate,
+      rotateSpeed,
+      onFpsUpdate,
+    });
+
+    useEffect(() => {
+      propsRef.current = {
+        models,
+        selectedModelId,
+        gizmoMode,
+        transformSpace,
+        onSelectModel,
+        onTransformChange,
+        autoRotate,
+        rotateSpeed,
+        onFpsUpdate,
+      };
+    });
+
+    // Initialize Three.js scene
+    useEffect(() => {
+      if (!canvasRef.current || !containerRef.current) return;
+
+      const canvas = canvasRef.current;
+      const width = containerRef.current.clientWidth || window.innerWidth;
+      const height = containerRef.current.clientHeight || window.innerHeight;
+
+      // 1. Scene
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(bgColor);
+
+      // 2. Camera
+      const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+      camera.position.set(4, 3, 6);
+
+      // 3. Renderer
+      const renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        preserveDrawingBuffer: true,
+        powerPreference: 'high-performance',
+      });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+
+      // 4. OrbitControls
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.maxDistance = 300;
+      controls.minDistance = 0.15;
+
+      // 5. TransformControls
+      const transformControls = new TransformControls(camera, renderer.domElement);
+      transformControls.size = 0.85;
+      const gizmoHelper = typeof (transformControls as any).getHelper === 'function' 
+        ? (transformControls as any).getHelper() 
+        : (transformControls as unknown as THREE.Object3D);
+      scene.add(gizmoHelper);
+
+      // Disable orbit controls while dragging gizmo
+      transformControls.addEventListener('dragging-changed', (event) => {
+        controls.enabled = !event.value;
+      });
+
+      // Synchronize changes made with gizmo back to React state
+      transformControls.addEventListener('objectChange', () => {
+        const target = transformControls.object;
+        if (!target) return;
+
+        const posX = target.position.x;
+        const posY = target.position.y;
+        const posZ = target.position.z;
+
+        const rotX = THREE.MathUtils.radToDeg(target.rotation.x);
+        const rotY = THREE.MathUtils.radToDeg(target.rotation.y);
+        const rotZ = THREE.MathUtils.radToDeg(target.rotation.z);
+
+        const scaleX = target.scale.x;
+        const scaleY = target.scale.y;
+        const scaleZ = target.scale.z;
+
+        propsRef.current.onTransformChange({
+          posX,
+          posY,
+          posZ,
+          rotX,
+          rotY,
+          rotZ,
+          scaleX,
+          scaleY,
+          scaleZ,
+        });
+
+        // Update BoxHelper if visible
+        if (threeRef.current?.bboxHelper) {
+          threeRef.current.bboxHelper.update();
+        }
+      });
+
+      // 6. Lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+      scene.add(ambientLight);
+
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 0.6);
+      hemiLight.position.set(0, 20, 0);
+      scene.add(hemiLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+      dirLight.position.set(6, 12, 8);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 0.5;
+      dirLight.shadow.camera.far = 40;
+      dirLight.shadow.bias = -0.0001;
+      scene.add(dirLight);
+
+      const dirLight2 = new THREE.DirectionalLight(0x93c5fd, 0.6);
+      dirLight2.position.set(-6, 8, -6);
+      scene.add(dirLight2);
+
+      // 7. Floor Grid
+      const gridHelper = new THREE.GridHelper(30, 30, 0x3b82f6, 0x1e293b);
+      gridHelper.position.y = -0.005;
+      scene.add(gridHelper);
+
+      // 8. Axes Helper
+      const axesHelper = new THREE.AxesHelper(3);
+      axesHelper.visible = false;
+      scene.add(axesHelper);
+
+      // 9. Raycasting on canvas click for model selection
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      const handlePointerDown = (e: MouseEvent) => {
+        if (!threeRef.current) return;
+        threeRef.current.pointerDownPos = { x: e.clientX, y: e.clientY };
+      };
+
+      const handlePointerUp = (e: MouseEvent) => {
+        if (!threeRef.current) return;
+        const dx = Math.abs(e.clientX - threeRef.current.pointerDownPos.x);
+        const dy = Math.abs(e.clientY - threeRef.current.pointerDownPos.y);
+
+        // Only treat as a click if mouse didn't drag extensively
+        if (dx < 6 && dy < 6 && !transformControls.dragging) {
+          const rect = canvas.getBoundingClientRect();
+          mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+          raycaster.setFromCamera(mouse, camera);
+
+          const currentModels = propsRef.current.models;
+          const rootObjects = currentModels.filter((m) => m.visible).map((m) => m.object);
+
+          const intersects = raycaster.intersectObjects(rootObjects, true);
+
+          if (intersects.length > 0) {
+            let clickedObj: THREE.Object3D | null = intersects[0].object;
+            let matchedModel: LoadedModel | undefined;
+
+            while (clickedObj) {
+              matchedModel = currentModels.find((m) => m.object === clickedObj);
+              if (matchedModel) break;
+              clickedObj = clickedObj.parent;
+            }
+
+            if (matchedModel) {
+              propsRef.current.onSelectModel(matchedModel.id);
+            }
+          }
+        }
+      };
+
+      canvas.addEventListener('pointerdown', handlePointerDown);
+      canvas.addEventListener('pointerup', handlePointerUp);
+
+      const clock = new THREE.Clock();
+
+      threeRef.current = {
+        scene,
+        camera,
+        renderer,
+        controls,
+        transformControls,
+        gridHelper,
+        axesHelper,
+        bboxHelper: null,
+        ambientLight,
+        hemiLight,
+        dirLight,
+        dirLight2,
+        mixer: null,
+        currentAction: null,
+        clock,
+        originalMaterials: new Map(),
+        pointerDownPos: { x: 0, y: 0 },
+        frameCount: 0,
+        lastTime: performance.now(),
+      };
+
+      // Resize observer
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const w = entry.contentRect.width;
+          const h = entry.contentRect.height;
+          if (w > 0 && h > 0) {
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+          }
+        }
+      });
+      resizeObserver.observe(containerRef.current);
+
+      // Render loop
+      let animId: number;
+      const animate = () => {
+        animId = requestAnimationFrame(animate);
+
+        const delta = clock.getDelta();
+
+        // FPS Calculation
+        if (threeRef.current) {
+          threeRef.current.frameCount++;
+          const now = performance.now();
+          if (now - threeRef.current.lastTime >= 500) {
+            const currentFps = Math.round(
+              (threeRef.current.frameCount * 1000) / (now - threeRef.current.lastTime)
+            );
+            if (propsRef.current.onFpsUpdate) {
+              propsRef.current.onFpsUpdate(currentFps);
+            }
+            threeRef.current.frameCount = 0;
+            threeRef.current.lastTime = now;
+          }
+        }
+
+        // Smooth camera transition if active
+        if (targetCameraPos.current && targetControlsTarget.current) {
+          camera.position.lerp(targetCameraPos.current, 0.12);
+          controls.target.lerp(targetControlsTarget.current, 0.12);
+
+          if (
+            camera.position.distanceTo(targetCameraPos.current) < 0.01 &&
+            controls.target.distanceTo(targetControlsTarget.current) < 0.01
+          ) {
+            camera.position.copy(targetCameraPos.current);
+            controls.target.copy(targetControlsTarget.current);
+            targetCameraPos.current = null;
+            targetControlsTarget.current = null;
+          }
+        }
+
+        // Update ViewCube quaternion ref
+        if (cameraQuaternionRef) {
+          cameraQuaternionRef.current.copy(camera.quaternion);
+        }
+
+        // Update animation mixer if playing
+        if (threeRef.current?.mixer) {
+          threeRef.current.mixer.update(delta);
+        }
+
+        // Auto rotate logic
+        if (propsRef.current.autoRotate && propsRef.current.models.length > 0) {
+          propsRef.current.models.forEach((m) => {
+            if (m.visible && m.object) {
+              m.object.rotation.y += 0.006 * propsRef.current.rotateSpeed;
+            }
+          });
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      };
+      animate();
+
+      return () => {
+        cancelAnimationFrame(animId);
+        resizeObserver.disconnect();
+        canvas.removeEventListener('pointerdown', handlePointerDown);
+        canvas.removeEventListener('pointerup', handlePointerUp);
+        transformControls.dispose();
+        renderer.dispose();
+      };
+    }, []);
+
+    // Sync Scene Models & Meshes
+    useEffect(() => {
+      if (!threeRef.current) return;
+      const { scene, originalMaterials } = threeRef.current;
+
+      models.forEach((model) => {
+        if (!scene.children.includes(model.object)) {
+          scene.add(model.object);
+        }
+        model.object.visible = model.visible;
+
+        model.object.traverse((child) => {
+          if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+            if (!originalMaterials.has(child.uuid) && child.material) {
+              originalMaterials.set(child.uuid, child.material);
+            }
+          }
+        });
+      });
+
+      const modelObjects = new Set(models.map((m) => m.object));
+      scene.children.forEach((child) => {
+        if (
+          child instanceof THREE.Group ||
+          child instanceof THREE.Mesh ||
+          child instanceof THREE.Points
+        ) {
+          if (child !== threeRef.current?.gridHelper && child !== threeRef.current?.axesHelper && !modelObjects.has(child)) {
+            if (!(child as any).isTransformControls) {
+              scene.remove(child);
+            }
+          }
+        }
+      });
+    }, [models]);
+
+    // Attach / Detach TransformControls to active model
+    useEffect(() => {
+      if (!threeRef.current) return;
+      const { transformControls, scene } = threeRef.current;
+
+      const selectedModel = models.find((m) => m.id === selectedModelId && m.visible);
+
+      if (selectedModel && gizmoMode) {
+        transformControls.attach(selectedModel.object);
+        transformControls.setMode(gizmoMode);
+        transformControls.setSpace(transformSpace);
+        transformControls.visible = true;
+      } else {
+        transformControls.detach();
+        transformControls.visible = false;
+      }
+
+      // Update Bounding Box Helper
+      if (threeRef.current.bboxHelper) {
+        scene.remove(threeRef.current.bboxHelper);
+        threeRef.current.bboxHelper = null;
+      }
+
+      if (selectedModel && showBBox) {
+        const bbox = new THREE.BoxHelper(selectedModel.object, 0x3b82f6);
+        scene.add(bbox);
+        threeRef.current.bboxHelper = bbox;
+      }
+    }, [selectedModelId, gizmoMode, transformSpace, models, showBBox]);
+
+    // Apply numerical Transform updates to selected model
+    useEffect(() => {
+      if (!threeRef.current || !selectedModelId) return;
+      const selectedModel = models.find((m) => m.id === selectedModelId);
+      if (!selectedModel) return;
+
+      const obj = selectedModel.object;
+      obj.position.set(transformValues.posX, transformValues.posY, transformValues.posZ);
+      obj.rotation.set(
+        THREE.MathUtils.degToRad(transformValues.rotX),
+        THREE.MathUtils.degToRad(transformValues.rotY),
+        THREE.MathUtils.degToRad(transformValues.rotZ)
+      );
+      obj.scale.set(transformValues.scaleX, transformValues.scaleY, transformValues.scaleZ);
+
+      if (threeRef.current.bboxHelper) {
+        threeRef.current.bboxHelper.update();
+      }
+    }, [transformValues, selectedModelId, models]);
+
+    // Update Lighting Presets & Intensity
+    useEffect(() => {
+      if (!threeRef.current) return;
+      const { ambientLight, dirLight, dirLight2, hemiLight } = threeRef.current;
+
+      dirLight.intensity = lightIntensity;
+
+      switch (lightingPreset) {
+        case 'studio':
+          ambientLight.color.setHex(0xffffff);
+          dirLight.color.setHex(0xffffff);
+          dirLight2.color.setHex(0x93c5fd);
+          hemiLight.color.setHex(0xffffff);
+          hemiLight.groundColor.setHex(0x334155);
+          break;
+        case 'sunset':
+          ambientLight.color.setHex(0xffaa77);
+          dirLight.color.setHex(0xff8833);
+          dirLight2.color.setHex(0xd946ef);
+          hemiLight.color.setHex(0xffaa66);
+          hemiLight.groundColor.setHex(0x331122);
+          break;
+        case 'night':
+          ambientLight.color.setHex(0x223355);
+          dirLight.color.setHex(0x38bdf8);
+          dirLight2.color.setHex(0x6366f1);
+          hemiLight.color.setHex(0x1e293b);
+          hemiLight.groundColor.setHex(0x050510);
+          break;
+        case 'outdoor':
+          ambientLight.color.setHex(0xddf0ff);
+          dirLight.color.setHex(0xfffaed);
+          dirLight2.color.setHex(0x38bdf8);
+          hemiLight.color.setHex(0x87ceeb);
+          hemiLight.groundColor.setHex(0x2e8b57);
+          break;
+        case 'neon':
+          ambientLight.color.setHex(0x220533);
+          dirLight.color.setHex(0x06b6d4);
+          dirLight2.color.setHex(0xf43f5e);
+          hemiLight.color.setHex(0xa855f7);
+          hemiLight.groundColor.setHex(0x0f172a);
+          break;
+      }
+    }, [lightingPreset, lightIntensity]);
+
+    // Update Background Color
+    useEffect(() => {
+      if (!threeRef.current) return;
+      threeRef.current.scene.background = new THREE.Color(bgColor);
+    }, [bgColor]);
+
+    // Update Grid & Axes Helper
+    useEffect(() => {
+      if (!threeRef.current) return;
+      threeRef.current.gridHelper.visible = showGrid;
+      threeRef.current.axesHelper.visible = showAxes;
+    }, [showGrid, showAxes]);
+
+    // Update Point Size for point clouds
+    useEffect(() => {
+      if (!threeRef.current) return;
+      models.forEach((m) => {
+        m.object.traverse((child) => {
+          if (child instanceof THREE.Points && child.material) {
+            (child.material as THREE.PointsMaterial).size = pointSize;
+            child.material.needsUpdate = true;
+          }
+        });
+      });
+    }, [pointSize, models]);
+
+    // Update Material Render Modes
+    useEffect(() => {
+      if (!threeRef.current) return;
+      const { originalMaterials } = threeRef.current;
+
+      models.forEach((m) => {
+        if (m.object) {
+          m.object.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              const origMat = originalMaterials.get(child.uuid) || child.material;
+
+              if (renderMode === 'default') {
+                child.material = origMat;
+              } else if (renderMode === 'wireframe') {
+                child.material = new THREE.MeshBasicMaterial({
+                  color: 0x60a5fa,
+                  wireframe: true,
+                });
+              } else if (renderMode === 'normals') {
+                child.material = new THREE.MeshNormalMaterial();
+              } else if (renderMode === 'xray') {
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0x3b82f6,
+                  transparent: true,
+                  opacity: 0.45,
+                  roughness: 0.1,
+                });
+              } else if (renderMode === 'points') {
+                // If mesh is switched to point cloud mode
+                child.material = new THREE.MeshBasicMaterial({
+                  color: 0x38bdf8,
+                  wireframe: true,
+                });
+              }
+            }
+          });
+        }
+      });
+    }, [renderMode, models]);
+
+    // Animation playback handling
+    useEffect(() => {
+      if (!threeRef.current) return;
+
+      const selectedModel = models.find((m) => m.id === selectedModelId) || models[0];
+      if (!selectedModel || !selectedModel.animations || selectedModel.animations.length === 0) {
+        if (threeRef.current.mixer) {
+          threeRef.current.mixer.stopAllAction();
+          threeRef.current.mixer = null;
+        }
+        return;
+      }
+
+      const clip = selectedModel.animations[activeAnimIndex];
+      if (!clip) return;
+
+      if (!threeRef.current.mixer || (threeRef.current.mixer.getRoot() as any) !== selectedModel.object) {
+        threeRef.current.mixer = new THREE.AnimationMixer(selectedModel.object);
+      }
+
+      const mixer = threeRef.current.mixer;
+      mixer.stopAllAction();
+
+      const action = mixer.clipAction(clip);
+      action.timeScale = animSpeed;
+      threeRef.current.currentAction = action;
+
+      if (isAnimPlaying) {
+        action.play();
+        action.paused = false;
+      } else {
+        action.play();
+        action.paused = true;
+      }
+    }, [activeAnimIndex, isAnimPlaying, animSpeed, selectedModelId, models]);
+
+    // Expose methods to parent via ref
+    React.useImperativeHandle(ref, () => ({
+      focusModel: (id?: string) => {
+        if (!threeRef.current) return;
+        const { camera } = threeRef.current;
+        const targetModel = models.find((m) => m.id === (id || selectedModelId)) || models[0];
+        if (!targetModel) return;
+
+        const box = new THREE.Box3().setFromObject(targetModel.object);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 2;
+
+        const fov = camera.fov * (Math.PI / 180);
+        let dist = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.8;
+        dist = Math.max(dist, 2.5);
+
+        targetCameraPos.current = new THREE.Vector3(
+          center.x + dist * 0.7,
+          center.y + dist * 0.6,
+          center.z + dist
+        );
+        targetControlsTarget.current = center.clone();
+      },
+
+      focusAll: () => {
+        if (!threeRef.current || models.length === 0) return;
+        const { camera } = threeRef.current;
+
+        const combinedBox = new THREE.Box3();
+        models.forEach((m) => {
+          if (m.visible) combinedBox.expandByObject(m.object);
+        });
+
+        const size = combinedBox.getSize(new THREE.Vector3());
+        const center = combinedBox.getCenter(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 2;
+
+        const fov = camera.fov * (Math.PI / 180);
+        let dist = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.8;
+        dist = Math.max(dist, 3);
+
+        targetCameraPos.current = new THREE.Vector3(
+          center.x + dist * 0.7,
+          center.y + dist * 0.6,
+          center.z + dist
+        );
+        targetControlsTarget.current = center.clone();
+      },
+
+      setCameraView: (view: CameraView) => {
+        if (!threeRef.current) return;
+
+        const combinedBox = new THREE.Box3();
+        const selectedModel = models.find((m) => m.id === selectedModelId);
+
+        if (selectedModel && selectedModel.visible) {
+          combinedBox.setFromObject(selectedModel.object);
+        } else if (models.length > 0) {
+          models.forEach((m) => {
+            if (m.visible) combinedBox.expandByObject(m.object);
+          });
+        } else {
+          combinedBox.set(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1));
+        }
+
+        const center = combinedBox.getCenter(new THREE.Vector3());
+        const size = combinedBox.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 2;
+        const dist = Math.max(maxDim * 2.2, 3);
+
+        let newPos = new THREE.Vector3();
+
+        switch (view) {
+          case 'front':
+            newPos.set(center.x, center.y, center.z + dist);
+            break;
+          case 'back':
+            newPos.set(center.x, center.y, center.z - dist);
+            break;
+          case 'top':
+            newPos.set(center.x, center.y + dist, center.z + 0.0001);
+            break;
+          case 'bottom':
+            newPos.set(center.x, center.y - dist, center.z + 0.0001);
+            break;
+          case 'left':
+            newPos.set(center.x - dist, center.y, center.z);
+            break;
+          case 'right':
+            newPos.set(center.x + dist, center.y, center.z);
+            break;
+          case 'isometric':
+            newPos.set(center.x + dist * 0.75, center.y + dist * 0.75, center.z + dist * 0.75);
+            break;
+        }
+
+        targetCameraPos.current = newPos;
+        targetControlsTarget.current = center.clone();
+      },
+
+      captureScreenshot: () => {
+        if (!threeRef.current) return '';
+        const { renderer, scene, camera, transformControls } = threeRef.current;
+
+        const wasGizmoVisible = transformControls.visible;
+        transformControls.visible = false;
+        renderer.render(scene, camera);
+        const dataUrl = renderer.domElement.toDataURL('image/png');
+        transformControls.visible = wasGizmoVisible;
+        renderer.render(scene, camera);
+
+        return dataUrl;
+      },
+    }));
+
+    return (
+      <div ref={containerRef} className="w-full h-full relative overflow-hidden">
+        <canvas ref={canvasRef} className="w-full h-full block cursor-grab active:cursor-grabbing" />
+      </div>
+    );
+  }
+);
