@@ -238,3 +238,47 @@ export function createDemoModel(existingModels: LoadedModel[]): LoadedModel {
     animations: [],
   };
 }
+
+/**
+ * Traverses an Object3D hierarchy and disposes all geometries, textures, and materials.
+ */
+export function dispose3DObject(object: THREE.Object3D): void {
+  object.traverse((child) => {
+    if (child instanceof THREE.Mesh || child instanceof THREE.Points || child instanceof THREE.Line) {
+      if (child.geometry) {
+        child.geometry.dispose();
+      }
+
+      if (child.material) {
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((mat) => {
+          // Dispose all texture maps
+          const matAny = mat as any;
+          [
+            'map',
+            'lightMap',
+            'bumpMap',
+            'normalMap',
+            'specularMap',
+            'envMap',
+            'alphaMap',
+            'roughnessMap',
+            'metalnessMap',
+            'emissiveMap',
+            'displacementMap',
+          ].forEach((prop) => {
+            if (matAny[prop] && typeof matAny[prop].dispose === 'function') {
+              matAny[prop].dispose();
+            }
+          });
+
+          mat.dispose();
+        });
+      }
+    }
+  });
+
+  if (object.parent) {
+    object.parent.remove(object);
+  }
+}

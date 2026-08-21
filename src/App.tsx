@@ -17,7 +17,7 @@ import { Viewport3D, ViewportHandle } from './components/Viewport3D';
 import { DropzoneOverlay } from './components/DropzoneOverlay';
 import { ToastContainer } from './components/Toast';
 import { ShortcutsModal } from './components/ShortcutsModal';
-import { loadModelFile, createDemoModel } from './utils/modelLoaders';
+import { loadModelFile, createDemoModel, dispose3DObject } from './utils/modelLoaders';
 
 export default function App() {
   const viewportRef = useRef<ViewportHandle>(null);
@@ -171,6 +171,10 @@ export default function App() {
 
   // Delete single model
   const handleDeleteModel = (id: string) => {
+    const toDelete = models.find((m) => m.id === id);
+    if (toDelete) {
+      dispose3DObject(toDelete.object);
+    }
     setModels((prev) => prev.filter((m) => m.id !== id));
     if (selectedModelId === id) {
       const remaining = models.filter((m) => m.id !== id);
@@ -181,15 +185,16 @@ export default function App() {
         setSelectedModelId(null);
       }
     }
-    addToast('Model removed from scene', 'info');
+    addToast('Model removed from scene and disposed', 'info');
   };
 
   // Clear all models
   const handleClearAllModels = () => {
+    models.forEach((m) => dispose3DObject(m.object));
     setModels([]);
     setSelectedModelId(null);
     setIsAnimPlaying(false);
-    addToast('All models cleared', 'info');
+    addToast('All models cleared and memory freed', 'info');
   };
 
   // Two-Way Transform Update from Inspector inputs

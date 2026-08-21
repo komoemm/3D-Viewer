@@ -37,7 +37,7 @@ export const TransformHUD: React.FC<TransformHUDProps> = ({
         <button
           type="button"
           onClick={onDeselect}
-          title="Deselect / Hide Gizmo (Esc / Q)"
+          title="Select / Deselect (Q / Esc)"
           className={`px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-semibold transition-all ${
             !hasSelection || mode === null
               ? 'bg-slate-800 text-slate-300 border border-slate-600/60'
@@ -45,9 +45,9 @@ export const TransformHUD: React.FC<TransformHUDProps> = ({
           }`}
         >
           <XCircle className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">None</span>
+          <span className="hidden sm:inline">Select</span>
           <kbd className="px-1 py-0.5 text-[9px] bg-slate-950 rounded border border-slate-800 font-mono text-slate-400">
-            Esc
+            Q
           </kbd>
         </button>
 
