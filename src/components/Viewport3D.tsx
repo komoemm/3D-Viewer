@@ -31,6 +31,7 @@ interface Viewport3DProps {
   activeAnimIndex: number;
   isAnimPlaying: boolean;
   animSpeed: number;
+  isOrthographic?: boolean;
   onSelectModel: (id: string | null) => void;
   onTransformChange: (values: Partial<TransformValues>) => void;
   onFpsUpdate?: (fps: number) => void;
@@ -41,6 +42,9 @@ export interface ViewportHandle {
   focusModel: (id?: string) => void;
   focusAll: () => void;
   setCameraView: (view: CameraView) => void;
+  orbit: (deltaX: number, deltaY: number) => void;
+  dolly: (deltaY: number) => void;
+  pan: (deltaX: number, deltaY: number) => void;
   captureScreenshot: () => string;
 }
 
@@ -65,6 +69,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       activeAnimIndex,
       isAnimPlaying,
       animSpeed,
+      isOrthographic = false,
       onSelectModel,
       onTransformChange,
       onFpsUpdate,
@@ -83,10 +88,13 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
     const threeRef = useRef<{
       scene: THREE.Scene;
       camera: THREE.PerspectiveCamera;
+      orthoCamera: THREE.OrthographicCamera;
+      activeCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
       renderer: THREE.WebGLRenderer;
       controls: OrbitControls;
       transformControls: TransformControls;
       gridHelper: THREE.GridHelper;
+      groundAxesHelper: THREE.Group;
       axesHelper: THREE.AxesHelper;
       bboxHelper: THREE.BoxHelper | null;
       ambientLight: THREE.AmbientLight;
@@ -141,9 +149,27 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(bgColor);
 
-      // 2. Camera
-      const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+      // 2. Camera (Perspective & Orthographic)
+      const aspect = width / height;
+      const camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
       camera.position.set(4, 3, 6);
+
+      const frustumHeight = 5;
+      const frustumWidth = frustumHeight * aspect;
+      const orthoCamera = new THREE.OrthographicCamera(
+        -frustumWidth / 2,
+        frustumWidth / 2,
+        frustumHeight / 2,
+        -frustumHeight / 2,
+        0.01,
+        1000
+      );
+      orthoCamera.position.copy(camera.position);
+      orthoCamera.quaternion.copy(camera.quaternion);
+
+      const activeCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera = isOrthographic
+        ? orthoCamera
+        : camera;
 
       // 3. Renderer
       const renderer = new THREE.WebGLRenderer({
@@ -161,14 +187,14 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       renderer.toneMappingExposure = 1.0;
 
       // 4. OrbitControls
-      const controls = new OrbitControls(camera, renderer.domElement);
+      const controls = new OrbitControls(activeCamera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.06;
       controls.maxDistance = 300;
       controls.minDistance = 0.15;
 
       // 5. TransformControls
-      const transformControls = new TransformControls(camera, renderer.domElement);
+      const transformControls = new TransformControls(activeCamera, renderer.domElement);
       transformControls.size = 0.85;
       const gizmoHelper = typeof (transformControls as any).getHelper === 'function' 
         ? (transformControls as any).getHelper() 
@@ -215,16 +241,16 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         }
       });
 
-      // 6. Lights
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+      // 6. Lights (Blender Studio 3-Point Setup)
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
       scene.add(ambientLight);
 
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 0.6);
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x303030, 0.5);
       hemiLight.position.set(0, 20, 0);
       scene.add(hemiLight);
 
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-      dirLight.position.set(6, 12, 8);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(5, 12, 7);
       dirLight.castShadow = true;
       dirLight.shadow.mapSize.width = 2048;
       dirLight.shadow.mapSize.height = 2048;
@@ -233,14 +259,36 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       dirLight.shadow.bias = -0.0001;
       scene.add(dirLight);
 
-      const dirLight2 = new THREE.DirectionalLight(0x93c5fd, 0.6);
-      dirLight2.position.set(-6, 8, -6);
+      const dirLight2 = new THREE.DirectionalLight(0xe2e8f0, 0.4);
+      dirLight2.position.set(-5, 6, -5);
       scene.add(dirLight2);
 
-      // 7. Floor Grid
-      const gridHelper = new THREE.GridHelper(30, 30, 0x3b82f6, 0x1e293b);
-      gridHelper.position.y = -0.005;
+      // 7. Floor Grid (Blender Style)
+      const gridHelper = new THREE.GridHelper(30, 30, 0x555555, 0x3d3d3d);
+      gridHelper.position.y = -0.002;
       scene.add(gridHelper);
+
+      // Blender Ground Coordinates: Red X-axis & Green Y/Z-axis intersecting cleanly at origin
+      const groundAxesHelper = new THREE.Group();
+
+      const xLineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-15, 0, 0),
+        new THREE.Vector3(15, 0, 0),
+      ]);
+      const xLineMat = new THREE.LineBasicMaterial({ color: 0xdc2626, linewidth: 2 });
+      const xGroundLine = new THREE.Line(xLineGeo, xLineMat);
+      groundAxesHelper.add(xGroundLine);
+
+      const zLineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, -15),
+        new THREE.Vector3(0, 0, 15),
+      ]);
+      const zLineMat = new THREE.LineBasicMaterial({ color: 0x16a34a, linewidth: 2 });
+      const zGroundLine = new THREE.Line(zLineGeo, zLineMat);
+      groundAxesHelper.add(zGroundLine);
+
+      groundAxesHelper.position.y = -0.001;
+      scene.add(groundAxesHelper);
 
       // 8. Axes Helper
       const axesHelper = new THREE.AxesHelper(3);
@@ -299,10 +347,13 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       threeRef.current = {
         scene,
         camera,
+        orthoCamera,
+        activeCamera,
         renderer,
         controls,
         transformControls,
         gridHelper,
+        groundAxesHelper,
         axesHelper,
         bboxHelper: null,
         ambientLight,
@@ -323,9 +374,20 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         for (const entry of entries) {
           const w = entry.contentRect.width;
           const h = entry.contentRect.height;
-          if (w > 0 && h > 0) {
-            camera.aspect = w / h;
+          if (w > 0 && h > 0 && threeRef.current) {
+            const currentAspect = w / h;
+            camera.aspect = currentAspect;
             camera.updateProjectionMatrix();
+
+            const dist = camera.position.distanceTo(controls.target);
+            const hHalf = Math.max(0.5, dist * Math.tan((45 / 2) * (Math.PI / 180)));
+            const wHalf = hHalf * currentAspect;
+            orthoCamera.left = -wHalf;
+            orthoCamera.right = wHalf;
+            orthoCamera.top = hHalf;
+            orthoCamera.bottom = -hHalf;
+            orthoCamera.updateProjectionMatrix();
+
             renderer.setSize(w, h);
           }
         }
@@ -355,25 +417,27 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
           }
         }
 
+        const currentActiveCam = threeRef.current?.activeCamera || camera;
+
         // Smooth camera transition if active
         if (targetCameraPos.current && targetControlsTarget.current) {
-          camera.position.lerp(targetCameraPos.current, 0.12);
+          currentActiveCam.position.lerp(targetCameraPos.current, 0.12);
           controls.target.lerp(targetControlsTarget.current, 0.12);
 
           if (
-            camera.position.distanceTo(targetCameraPos.current) < 0.01 &&
+            currentActiveCam.position.distanceTo(targetCameraPos.current) < 0.01 &&
             controls.target.distanceTo(targetControlsTarget.current) < 0.01
           ) {
-            camera.position.copy(targetCameraPos.current);
+            currentActiveCam.position.copy(targetCameraPos.current);
             controls.target.copy(targetControlsTarget.current);
             targetCameraPos.current = null;
             targetControlsTarget.current = null;
           }
         }
 
-        // Update ViewCube quaternion ref
+        // Update ViewportGizmo quaternion ref
         if (cameraQuaternionRef) {
-          cameraQuaternionRef.current.copy(camera.quaternion);
+          cameraQuaternionRef.current.copy(currentActiveCam.quaternion);
         }
 
         // Update animation mixer if playing
@@ -391,7 +455,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         }
 
         controls.update();
-        renderer.render(scene, camera);
+        renderer.render(scene, currentActiveCam);
       };
       animate();
 
@@ -404,6 +468,42 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         renderer.dispose();
       };
     }, []);
+
+    // Sync Orthographic Projection Mode
+    useEffect(() => {
+      if (!threeRef.current || !containerRef.current) return;
+      const { camera, orthoCamera, controls, transformControls } = threeRef.current;
+      const w = containerRef.current.clientWidth || window.innerWidth;
+      const h = containerRef.current.clientHeight || window.innerHeight;
+      const aspect = w / h;
+
+      if (isOrthographic) {
+        const dist = camera.position.distanceTo(controls.target);
+        const halfH = Math.max(0.5, dist * Math.tan((45 / 2) * (Math.PI / 180)));
+        const halfW = halfH * aspect;
+        orthoCamera.left = -halfW;
+        orthoCamera.right = halfW;
+        orthoCamera.top = halfH;
+        orthoCamera.bottom = -halfH;
+        orthoCamera.position.copy(camera.position);
+        orthoCamera.quaternion.copy(camera.quaternion);
+        orthoCamera.updateProjectionMatrix();
+
+        controls.object = orthoCamera;
+        (transformControls as any).camera = orthoCamera;
+        threeRef.current.activeCamera = orthoCamera;
+      } else {
+        camera.position.copy(orthoCamera.position);
+        camera.quaternion.copy(orthoCamera.quaternion);
+        camera.aspect = aspect;
+        camera.updateProjectionMatrix();
+
+        controls.object = camera;
+        (transformControls as any).camera = camera;
+        threeRef.current.activeCamera = camera;
+      }
+      controls.update();
+    }, [isOrthographic]);
 
     // Sync Scene Models & Meshes
     useEffect(() => {
@@ -501,36 +601,48 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       switch (lightingPreset) {
         case 'studio':
           ambientLight.color.setHex(0xffffff);
+          ambientLight.intensity = 0.65;
           dirLight.color.setHex(0xffffff);
-          dirLight2.color.setHex(0x93c5fd);
+          dirLight.intensity = lightIntensity;
+          dirLight2.color.setHex(0xe2e8f0);
+          dirLight2.intensity = 0.4 * (lightIntensity / 1.2);
           hemiLight.color.setHex(0xffffff);
-          hemiLight.groundColor.setHex(0x334155);
+          hemiLight.groundColor.setHex(0x303030);
+          hemiLight.intensity = 0.5;
           break;
         case 'sunset':
           ambientLight.color.setHex(0xffaa77);
+          ambientLight.intensity = 0.5;
           dirLight.color.setHex(0xff8833);
           dirLight2.color.setHex(0xd946ef);
+          dirLight2.intensity = 0.6;
           hemiLight.color.setHex(0xffaa66);
           hemiLight.groundColor.setHex(0x331122);
           break;
         case 'night':
           ambientLight.color.setHex(0x223355);
+          ambientLight.intensity = 0.4;
           dirLight.color.setHex(0x38bdf8);
           dirLight2.color.setHex(0x6366f1);
+          dirLight2.intensity = 0.5;
           hemiLight.color.setHex(0x1e293b);
           hemiLight.groundColor.setHex(0x050510);
           break;
         case 'outdoor':
           ambientLight.color.setHex(0xddf0ff);
+          ambientLight.intensity = 0.7;
           dirLight.color.setHex(0xfffaed);
           dirLight2.color.setHex(0x38bdf8);
+          dirLight2.intensity = 0.5;
           hemiLight.color.setHex(0x87ceeb);
           hemiLight.groundColor.setHex(0x2e8b57);
           break;
         case 'neon':
           ambientLight.color.setHex(0x220533);
+          ambientLight.intensity = 0.3;
           dirLight.color.setHex(0x06b6d4);
           dirLight2.color.setHex(0xf43f5e);
+          dirLight2.intensity = 0.8;
           hemiLight.color.setHex(0xa855f7);
           hemiLight.groundColor.setHex(0x0f172a);
           break;
@@ -547,6 +659,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
     useEffect(() => {
       if (!threeRef.current) return;
       threeRef.current.gridHelper.visible = showGrid;
+      threeRef.current.groundAxesHelper.visible = showGrid;
       threeRef.current.axesHelper.visible = showAxes;
     }, [showGrid, showAxes]);
 
@@ -740,16 +853,69 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         targetControlsTarget.current = center.clone();
       },
 
+      orbit: (deltaX: number, deltaY: number) => {
+        if (!threeRef.current) return;
+        const { controls, activeCamera } = threeRef.current;
+        const offset = new THREE.Vector3().subVectors(activeCamera.position, controls.target);
+        const radius = offset.length();
+        let theta = Math.atan2(offset.x, offset.z);
+        let phi = Math.acos(Math.max(-1, Math.min(1, offset.y / (radius || 1))));
+
+        theta -= deltaX * 0.005;
+        phi = Math.max(0.01, Math.min(Math.PI - 0.01, phi - deltaY * 0.005));
+
+        offset.x = radius * Math.sin(phi) * Math.sin(theta);
+        offset.y = radius * Math.cos(phi);
+        offset.z = radius * Math.sin(phi) * Math.cos(theta);
+
+        activeCamera.position.copy(controls.target).add(offset);
+        activeCamera.lookAt(controls.target);
+        controls.update();
+      },
+
+      dolly: (deltaY: number) => {
+        if (!threeRef.current) return;
+        const { controls, activeCamera, orthoCamera } = threeRef.current;
+        const factor = 1 + deltaY * 0.005;
+        const offset = new THREE.Vector3().subVectors(activeCamera.position, controls.target);
+        const newDist = Math.max(0.2, Math.min(500, offset.length() * factor));
+        offset.setLength(newDist);
+        activeCamera.position.copy(controls.target).add(offset);
+
+        if (activeCamera === orthoCamera) {
+          orthoCamera.zoom = Math.max(0.01, Math.min(50, orthoCamera.zoom / factor));
+          orthoCamera.updateProjectionMatrix();
+        }
+        controls.update();
+      },
+
+      pan: (deltaX: number, deltaY: number) => {
+        if (!threeRef.current) return;
+        const { controls, activeCamera } = threeRef.current;
+        const vRight = new THREE.Vector3();
+        const vUp = new THREE.Vector3();
+        activeCamera.matrix.extractBasis(vRight, vUp, new THREE.Vector3());
+
+        const panDist = Math.max(0.5, activeCamera.position.distanceTo(controls.target)) * 0.0015;
+        const panOffset = new THREE.Vector3()
+          .addScaledVector(vRight, -deltaX * panDist)
+          .addScaledVector(vUp, deltaY * panDist);
+
+        activeCamera.position.add(panOffset);
+        controls.target.add(panOffset);
+        controls.update();
+      },
+
       captureScreenshot: () => {
         if (!threeRef.current) return '';
-        const { renderer, scene, camera, transformControls } = threeRef.current;
+        const { renderer, scene, camera, orthoCamera, activeCamera, transformControls } = threeRef.current;
 
         const wasGizmoVisible = transformControls.visible;
         transformControls.visible = false;
-        renderer.render(scene, camera);
+        renderer.render(scene, activeCamera || camera);
         const dataUrl = renderer.domElement.toDataURL('image/png');
         transformControls.visible = wasGizmoVisible;
-        renderer.render(scene, camera);
+        renderer.render(scene, activeCamera || camera);
 
         return dataUrl;
       },

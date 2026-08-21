@@ -15,38 +15,42 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
     { key: 'R', desc: 'Activate Scale Gizmo' },
     { key: 'X', desc: 'Toggle World / Local Transform Space' },
     { key: 'Q / Esc', desc: 'Deselect active model / Hide gizmo' },
-    { key: 'F', desc: 'Focus camera on selected model' },
-    { key: 'Left Click', desc: 'Click any object in 3D scene to select it' },
+    { key: 'F', desc: 'Frame / Focus camera on selected model' },
+    { key: '1 / Num 1', desc: 'Snap camera to Front View' },
+    { key: '3 / Num 3', desc: 'Snap camera to Right View' },
+    { key: '7 / Num 7', desc: 'Snap camera to Top View' },
+    { key: '5 / Num 5', desc: 'Toggle Perspective / Orthographic' },
+    { key: '0 / Num 0', desc: 'User Perspective / Isometric View' },
     { key: 'Left Drag', desc: 'Orbit / Rotate 3D camera' },
-    { key: 'Right Drag', desc: 'Pan / Translate 3D camera' },
-    { key: 'Scroll Wheel', desc: 'Zoom in / out' },
+    { key: 'Right / Shift+Drag', desc: 'Pan / Move 3D camera' },
+    { key: 'Scroll Wheel', desc: 'Zoom / Dolly camera' },
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="glass-panel w-full max-w-md rounded-2xl p-5 border border-slate-700/80 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2 text-white font-bold text-sm">
-            <Keyboard className="w-4 h-4 text-blue-400" />
-            <span>Keyboard & Mouse Shortcuts</span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 select-none">
+      <div className="w-full max-w-md rounded-2xl p-5 bg-[#202020]/95 border border-[#3a3a3a] shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 text-slate-200">
+        <div className="flex items-center justify-between pb-3 border-b border-[#333333]">
+          <div className="flex items-center gap-2 text-white font-semibold text-sm">
+            <Keyboard className="w-4 h-4 text-[#ea7600]" />
+            <span>Blender 3D Viewport Shortcuts</span>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#2e2e2e] transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+        <div className="space-y-1.5 max-h-84 overflow-y-auto pr-1">
           {shortcuts.map((item, idx) => (
             <div
               key={idx}
-              className="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs"
+              className="flex items-center justify-between p-2 rounded-lg bg-[#282828] border border-[#333333] text-xs"
             >
               <span className="text-slate-300">{item.desc}</span>
-              <kbd className="px-2 py-1 rounded bg-slate-950 border border-slate-700 font-mono text-[11px] font-bold text-blue-400 shadow-sm shrink-0 ml-2">
+              <kbd className="px-2 py-0.5 rounded bg-[#181818] border border-[#3a3a3a] font-mono text-[11px] font-semibold text-[#ea7600] shadow-sm shrink-0 ml-2">
                 {item.key}
               </kbd>
             </div>
@@ -57,7 +61,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-500/25 transition"
+            className="w-full py-2 bg-[#ea7600] hover:bg-[#ff8811] text-white font-medium text-xs rounded-xl shadow-lg shadow-[#ea7600]/25 transition cursor-pointer"
           >
             Got it
           </button>

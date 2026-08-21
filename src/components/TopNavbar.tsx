@@ -179,7 +179,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   return (
     <header
       ref={menuContainerRef}
-      className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-3 sm:px-5 py-2.5 glass-panel border-b border-slate-800/80 select-none"
+      className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-3 sm:px-4 py-2 bg-[#242424]/95 border-b border-[#383838] backdrop-blur-xl select-none text-[#e0e0e0]"
     >
       {/* Hidden File Input */}
       <input
@@ -192,14 +192,14 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       />
 
       {/* Left Area: Brand & Dropdown Popovers */}
-      <div className="flex items-center gap-1.5 sm:gap-2.5">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Brand */}
-        <div className="flex items-center gap-2 pr-2 sm:pr-3 border-r border-slate-800/80">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 flex items-center justify-center shadow-md shadow-blue-500/25 border border-white/20 shrink-0">
+        <div className="flex items-center gap-2 pr-2 sm:pr-3 border-r border-[#383838]">
+          <div className="w-7 h-7 rounded-lg bg-[#ea7600] flex items-center justify-center shadow-md shadow-[#ea7600]/30 border border-white/20 shrink-0">
             <Box className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-xs sm:text-sm tracking-wide text-white hidden md:inline">
-            3D Studio
+          <span className="font-semibold text-xs sm:text-sm tracking-wide text-white hidden md:inline">
+            Blender 3D Viewport
           </span>
         </div>
 
@@ -566,22 +566,30 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               <div className="space-y-1.5 pt-1 border-t border-slate-800">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase">Background Color</span>
                 <div className="flex items-center gap-2">
-                  {['#090d16', '#111827', '#020617', '#1e293b', '#27272a', '#000000'].map((col) => (
+                  {[
+                    { hex: '#303030', label: 'Blender Neutral (#303030)' },
+                    { hex: '#3e3e3e', label: 'Studio Gray (#3e3e3e)' },
+                    { hex: '#242424', label: 'Deep Charcoal (#242424)' },
+                    { hex: '#1e1e1e', label: 'Dark Gray (#1e1e1e)' },
+                    { hex: '#090d16', label: 'Navy Slate (#090d16)' },
+                    { hex: '#000000', label: 'Pure Black (#000000)' },
+                  ].map(({ hex, label }) => (
                     <button
-                      key={col}
+                      key={hex}
                       type="button"
-                      onClick={() => onSetBgColor(col)}
-                      style={{ backgroundColor: col }}
-                      className={`w-6 h-6 rounded-full border-2 transition-transform ${
-                        bgColor === col ? 'border-blue-400 scale-110' : 'border-slate-700'
+                      onClick={() => onSetBgColor(hex)}
+                      style={{ backgroundColor: hex }}
+                      className={`w-6 h-6 rounded-md border-2 transition-transform cursor-pointer ${
+                        bgColor === hex ? 'border-[#ea7600] scale-110' : 'border-slate-700'
                       }`}
+                      title={label}
                     />
                   ))}
                   <input
                     type="color"
                     value={bgColor}
                     onChange={(e) => onSetBgColor(e.target.value)}
-                    className="w-6 h-6 rounded-full bg-transparent border-0 cursor-pointer"
+                    className="w-6 h-6 rounded-md bg-transparent border-0 cursor-pointer"
                     title="Custom Color"
                   />
                 </div>
@@ -777,7 +785,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 shadow-md shadow-blue-500/25 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#ea7600] hover:bg-[#d96d00] shadow-md shadow-[#ea7600]/25 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
           title="Open .glb, .gltf, .fbx, .ply, .spz, .obj, .stl"
         >
           <Upload className="w-3.5 h-3.5" />

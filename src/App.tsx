@@ -12,7 +12,7 @@ import {
 } from './types';
 import { TopNavbar } from './components/TopNavbar';
 import { TransformHUD } from './components/TransformHUD';
-import { ViewCube } from './components/ViewCube';
+import { ViewportGizmo } from './components/ViewportGizmo';
 import { Viewport3D, ViewportHandle } from './components/Viewport3D';
 import { DropzoneOverlay } from './components/DropzoneOverlay';
 import { ToastContainer } from './components/Toast';
@@ -45,8 +45,8 @@ export default function App() {
 
   // Environment & Display State
   const [lightingPreset, setLightingPreset] = useState<LightingPreset>('studio');
-  const [lightIntensity, setLightIntensity] = useState<number>(1.5);
-  const [bgColor, setBgColor] = useState<string>('#090d16');
+  const [lightIntensity, setLightIntensity] = useState<number>(1.2);
+  const [bgColor, setBgColor] = useState<string>('#303030');
   const [renderMode, setRenderMode] = useState<RenderMode>('default');
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [showAxes, setShowAxes] = useState<boolean>(false);
@@ -54,6 +54,7 @@ export default function App() {
   const [autoRotate, setAutoRotate] = useState<boolean>(false);
   const [rotateSpeed, setRotateSpeed] = useState<number>(1.0);
   const [showBBox, setShowBBox] = useState<boolean>(false);
+  const [isOrthographic, setIsOrthographic] = useState<boolean>(false);
 
   // Animation State
   const [activeAnimIndex, setActiveAnimIndex] = useState<number>(0);
@@ -282,6 +283,24 @@ export default function App() {
           viewportRef.current?.focusAll();
           addToast('Framed scene', 'info');
         }
+      } else if (key === '1' || e.code === 'Numpad1') {
+        viewportRef.current?.setCameraView('front');
+        addToast('View: Front', 'info');
+      } else if (key === '3' || e.code === 'Numpad3') {
+        viewportRef.current?.setCameraView('right');
+        addToast('View: Right', 'info');
+      } else if (key === '7' || e.code === 'Numpad7') {
+        viewportRef.current?.setCameraView('top');
+        addToast('View: Top', 'info');
+      } else if (key === '5' || e.code === 'Numpad5') {
+        setIsOrthographic((prev) => {
+          const next = !prev;
+          addToast(`Camera: ${next ? 'Orthographic' : 'Perspective'}`, 'info');
+          return next;
+        });
+      } else if (key === '0' || e.code === 'Numpad0') {
+        viewportRef.current?.setCameraView('isometric');
+        addToast('View: Isometric User Perspective', 'info');
       }
     };
 
@@ -362,6 +381,7 @@ export default function App() {
           activeAnimIndex={activeAnimIndex}
           isAnimPlaying={isAnimPlaying}
           animSpeed={animSpeed}
+          isOrthographic={isOrthographic}
           onSelectModel={handleSelectModel}
           onTransformChange={handleTransformGizmoChange}
           onFpsUpdate={setFps}
@@ -432,9 +452,14 @@ export default function App() {
         }}
       />
 
-      {/* 4. Interactive 3D ViewCube Overlay (Bottom-Right Corner) */}
-      <ViewCube
+      {/* 4. Blender-Style 3D Viewport Orientation Gizmo & Navigation Strip */}
+      <ViewportGizmo
         onSetCameraView={(view: CameraView) => viewportRef.current?.setCameraView(view)}
+        onOrbit={(dx, dy) => viewportRef.current?.orbit(dx, dy)}
+        onDolly={(dy) => viewportRef.current?.dolly(dy)}
+        onPan={(dx, dy) => viewportRef.current?.pan(dx, dy)}
+        onToggleOrthographic={() => setIsOrthographic((prev) => !prev)}
+        isOrthographic={isOrthographic}
         onFocusSelected={() => {
           if (selectedModelId) {
             viewportRef.current?.focusModel(selectedModelId);
