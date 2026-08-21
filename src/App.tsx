@@ -114,27 +114,29 @@ export default function App() {
     [models, syncTransformStateWithModel, gizmoMode]
   );
 
-  // Batch Load Files
+  // Batch Load Files with concurrent queue processing
   const handleFilesSelected = async (files: FileList | File[]) => {
     const fileList = Array.from(files);
     if (fileList.length === 0) return;
 
-    addToast(`Loading ${fileList.length} 3D model(s)...`, 'info');
+    addToast(`Queuing ${fileList.length} model(s) for loading...`, 'info');
 
     const loadedList: LoadedModel[] = [];
     let currentModels = [...models];
 
-    for (const file of fileList) {
-      try {
-        const loaded = await loadModelFile(file, currentModels);
-        loadedList.push(loaded);
-        currentModels.push(loaded);
-        addToast(`Loaded ${file.name}`, 'success');
-      } catch (err: any) {
-        console.error(err);
-        addToast(err.message || `Failed to load ${file.name}`, 'error');
-      }
-    }
+    await Promise.all(
+      fileList.map(async (file) => {
+        try {
+          const loaded = await loadModelFile(file, currentModels);
+          loadedList.push(loaded);
+          currentModels.push(loaded);
+          addToast(`Loaded ${file.name}`, 'success');
+        } catch (err: any) {
+          console.error(err);
+          addToast(err.message || `Failed to load ${file.name}`, 'error');
+        }
+      })
+    );
 
     if (loadedList.length > 0) {
       setModels((prev) => [...prev, ...loadedList]);

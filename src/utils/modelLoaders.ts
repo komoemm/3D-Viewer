@@ -6,7 +6,68 @@ import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { decodeSPZ } from './spzDecoder';
+import { globalDecoderWorkerPool } from './decoderWorkerPool';
 import { LoadedModel, ModelStats } from '../types';
+
+/**
+ * Concurrency-controlled queue for asynchronous 3D model parsing and loading.
+ * Limits concurrent model decoding and geometry parsing to a max of 2-3 at a time
+ * to prevent main-thread freezing and VRAM spike bottlenecks.
+ */
+export class ModelLoadingQueue {
+  private maxConcurrent: number;
+  private running = 0;
+  private queue: Array<() => Promise<void>> = [];
+
+  constructor(maxConcurrent = 2) {
+    this.maxConcurrent = maxConcurrent;
+  }
+
+  /**
+   * Enqueue a model loading task. Executes immediately if below concurrency limit,
+   * otherwise waits for previous tasks to settle.
+   */
+  enqueue<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const execute = async () => {
+        this.running++;
+        try {
+          const result = await task();
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        } finally {
+          this.running--;
+          this.next();
+        }
+      };
+
+      if (this.running < this.maxConcurrent) {
+        execute();
+      } else {
+        this.queue.push(execute);
+      }
+    });
+  }
+
+  private next() {
+    if (this.queue.length > 0 && this.running < this.maxConcurrent) {
+      const task = this.queue.shift();
+      if (task) task();
+    }
+  }
+
+  get pendingCount(): number {
+    return this.queue.length;
+  }
+
+  get activeCount(): number {
+    return this.running;
+  }
+}
+
+// Global model loader queue singleton with max concurrency of 2
+export const globalModelLoadingQueue = new ModelLoadingQueue(2);
 
 // Setup DRACO Loader singleton
 const dracoLoader = new DRACOLoader();
@@ -21,6 +82,32 @@ const objLoader = new OBJLoader();
 const stlLoader = new STLLoader();
 
 /**
+ * Prepares and optimizes meshes in an Object3D hierarchy:
+ * - Enables frustum culling
+ * - Pre-computes bounding box and bounding sphere for accurate spatial clipping
+ * - Configures shadow casting/receiving
+ */
+export function optimizeMeshHierarchy(object: THREE.Object3D): void {
+  object.traverse((child) => {
+    if (child instanceof THREE.Mesh || child instanceof THREE.Points || child instanceof THREE.Line) {
+      child.frustumCulled = true;
+      child.castShadow = true;
+      child.receiveShadow = true;
+
+      const geom = child.geometry;
+      if (geom) {
+        if (!geom.boundingSphere) {
+          geom.computeBoundingSphere();
+        }
+        if (!geom.boundingBox) {
+          geom.computeBoundingBox();
+        }
+      }
+    }
+  });
+}
+
+/**
  * Calculates statistics (triangles, vertices, mesh count, materials, size) for an Object3D.
  */
 export function calculateModelStats(object: THREE.Object3D): ModelStats {
@@ -30,8 +117,9 @@ export function calculateModelStats(object: THREE.Object3D): ModelStats {
   const materialSet = new Set<string>();
 
   object.traverse((child) => {
-    if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+    if (child instanceof THREE.Mesh || child instanceof THREE.Points || child instanceof THREE.Line) {
       meshes++;
+      child.frustumCulled = true;
       child.castShadow = true;
       child.receiveShadow = true;
 
@@ -45,6 +133,13 @@ export function calculateModelStats(object: THREE.Object3D): ModelStats {
 
       const geom = child.geometry;
       if (geom) {
+        if (!geom.boundingSphere) {
+          geom.computeBoundingSphere();
+        }
+        if (!geom.boundingBox) {
+          geom.computeBoundingBox();
+        }
+
         if (geom.index) {
           triangles += geom.index.count / 3;
         } else if (geom.attributes.position) {
@@ -96,81 +191,189 @@ export function normalizeModelPosition(object: THREE.Object3D, existingModels: L
 
 /**
  * Loads a 3D model file and returns a LoadedModel object.
+ * Processes via the globalModelLoadingQueue to limit concurrent decodes to 2 max.
  */
 export async function loadModelFile(file: File, existingModels: LoadedModel[]): Promise<LoadedModel> {
-  const filename = file.name;
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  const url = URL.createObjectURL(file);
+  return globalModelLoadingQueue.enqueue(async () => {
+    const filename = file.name;
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    const url = URL.createObjectURL(file);
 
-  let object: THREE.Object3D;
-  let animations: THREE.AnimationClip[] = [];
+    let object: THREE.Object3D | null = null;
+    let animations: THREE.AnimationClip[] = [];
 
-  try {
-    if (ext === 'glb' || ext === 'gltf') {
-      const gltf = await gltfLoader.loadAsync(url);
-      object = gltf.scene;
-      animations = gltf.animations || [];
-    } else if (ext === 'fbx') {
-      const fbx = await fbxLoader.loadAsync(url);
-      object = fbx;
-      animations = fbx.animations || [];
-    } else if (ext === 'ply') {
-      const geom = await plyLoader.loadAsync(url);
-      geom.computeVertexNormals();
-      if (geom.index || (geom.attributes.normal && geom.attributes.position.count > 500)) {
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0x94a3b8,
-          roughness: 0.35,
-          metalness: 0.25,
-          vertexColors: !!geom.attributes.color,
-        });
-        object = new THREE.Mesh(geom, mat);
-      } else {
+    try {
+      if (ext === 'glb' || ext === 'gltf') {
+        const gltf = await gltfLoader.loadAsync(url);
+        object = gltf.scene;
+        animations = gltf.animations || [];
+      } else if (ext === 'fbx') {
+        const fbx = await fbxLoader.loadAsync(url);
+        object = fbx;
+        animations = fbx.animations || [];
+      } else if (ext === 'ply') {
+        if (globalDecoderWorkerPool.available) {
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const res = await globalDecoderWorkerPool.decode('ply', { buffer: arrayBuffer });
+            if (res.positions) {
+              const geom = new THREE.BufferGeometry();
+              geom.setAttribute('position', new THREE.BufferAttribute(res.positions, 3));
+              if (res.normals) geom.setAttribute('normal', new THREE.BufferAttribute(res.normals, 3));
+              else geom.computeVertexNormals();
+              if (res.colors) geom.setAttribute('color', new THREE.BufferAttribute(res.colors, 3));
+              if (res.indices) geom.setIndex(new THREE.BufferAttribute(res.indices, 1));
+              geom.computeBoundingSphere();
+              geom.computeBoundingBox();
+
+              if (!res.isPoints) {
+                const mat = new THREE.MeshStandardMaterial({
+                  color: 0x94a3b8,
+                  roughness: 0.35,
+                  metalness: 0.25,
+                  vertexColors: !!res.colors,
+                });
+                object = new THREE.Mesh(geom, mat);
+              } else {
+                const mat = new THREE.PointsMaterial({
+                  size: 0.05,
+                  vertexColors: !!res.colors,
+                  color: res.colors ? 0xffffff : 0x3b82f6,
+                });
+                object = new THREE.Points(geom, mat);
+              }
+            }
+          } catch (workerErr) {
+            console.warn('Worker PLY decoding error, using fallback:', workerErr);
+          }
+        }
+
+        if (!object) {
+          const geom = await plyLoader.loadAsync(url);
+          geom.computeVertexNormals();
+          if (geom.index || (geom.attributes.normal && geom.attributes.position.count > 500)) {
+            const mat = new THREE.MeshStandardMaterial({
+              color: 0x94a3b8,
+              roughness: 0.35,
+              metalness: 0.25,
+              vertexColors: !!geom.attributes.color,
+            });
+            object = new THREE.Mesh(geom, mat);
+          } else {
+            const mat = new THREE.PointsMaterial({
+              size: 0.05,
+              vertexColors: !!geom.attributes.color,
+              color: geom.attributes.color ? 0xffffff : 0x3b82f6,
+            });
+            object = new THREE.Points(geom, mat);
+          }
+        }
+      } else if (ext === 'spz') {
+        const geom = await decodeSPZ(file);
         const mat = new THREE.PointsMaterial({
-          size: 0.05,
-          vertexColors: !!geom.attributes.color,
-          color: geom.attributes.color ? 0xffffff : 0x3b82f6,
+          size: 0.04,
+          vertexColors: true,
         });
         object = new THREE.Points(geom, mat);
+      } else if (ext === 'obj') {
+        if (globalDecoderWorkerPool.available) {
+          try {
+            const text = await file.text();
+            const res = await globalDecoderWorkerPool.decode('obj', { text });
+            if (res.meshes && res.meshes.length > 0) {
+              const group = new THREE.Group();
+              for (const m of res.meshes) {
+                const geom = new THREE.BufferGeometry();
+                geom.setAttribute('position', new THREE.BufferAttribute(m.positions, 3));
+                if (m.normals) geom.setAttribute('normal', new THREE.BufferAttribute(m.normals, 3));
+                else geom.computeVertexNormals();
+                if (m.uvs) geom.setAttribute('uv', new THREE.BufferAttribute(m.uvs, 2));
+                if (m.colors) geom.setAttribute('color', new THREE.BufferAttribute(m.colors, 3));
+                if (m.indices) geom.setIndex(new THREE.BufferAttribute(m.indices, 1));
+                geom.computeBoundingSphere();
+                geom.computeBoundingBox();
+
+                const mat = new THREE.MeshStandardMaterial({
+                  color: 0x94a3b8,
+                  roughness: 0.35,
+                  metalness: 0.25,
+                  vertexColors: !!m.colors,
+                });
+                const mesh = new THREE.Mesh(geom, mat);
+                mesh.name = m.name;
+                group.add(mesh);
+              }
+              object = group;
+            }
+          } catch (workerErr) {
+            console.warn('Worker OBJ decoding error, using fallback:', workerErr);
+          }
+        }
+
+        if (!object) {
+          object = await objLoader.loadAsync(url);
+        }
+      } else if (ext === 'stl') {
+        if (globalDecoderWorkerPool.available) {
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            const res = await globalDecoderWorkerPool.decode('stl', { buffer: arrayBuffer });
+            if (res.positions) {
+              const geom = new THREE.BufferGeometry();
+              geom.setAttribute('position', new THREE.BufferAttribute(res.positions, 3));
+              if (res.normals) geom.setAttribute('normal', new THREE.BufferAttribute(res.normals, 3));
+              else geom.computeVertexNormals();
+              geom.computeBoundingSphere();
+              geom.computeBoundingBox();
+
+              const mat = new THREE.MeshStandardMaterial({
+                color: 0x94a3b8,
+                roughness: 0.35,
+                metalness: 0.2,
+              });
+              object = new THREE.Mesh(geom, mat);
+            }
+          } catch (workerErr) {
+            console.warn('Worker STL decoding error, using fallback:', workerErr);
+          }
+        }
+
+        if (!object) {
+          const geom = await stlLoader.loadAsync(url);
+          geom.computeVertexNormals();
+          const mat = new THREE.MeshStandardMaterial({
+            color: 0x94a3b8,
+            roughness: 0.35,
+            metalness: 0.2,
+          });
+          object = new THREE.Mesh(geom, mat);
+        }
+      } else {
+        throw new Error(`Unsupported file format: .${ext}`);
       }
-    } else if (ext === 'spz') {
-      const geom = await decodeSPZ(file);
-      const mat = new THREE.PointsMaterial({
-        size: 0.04,
-        vertexColors: true,
-      });
-      object = new THREE.Points(geom, mat);
-    } else if (ext === 'obj') {
-      object = await objLoader.loadAsync(url);
-    } else if (ext === 'stl') {
-      const geom = await stlLoader.loadAsync(url);
-      geom.computeVertexNormals();
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0x94a3b8,
-        roughness: 0.35,
-        metalness: 0.2,
-      });
-      object = new THREE.Mesh(geom, mat);
-    } else {
-      throw new Error(`Unsupported file format: .${ext}`);
+
+      if (!object) {
+        throw new Error(`Failed to parse 3D model geometry for ${filename}`);
+      }
+
+      optimizeMeshHierarchy(object);
+      normalizeModelPosition(object, existingModels);
+      const stats = calculateModelStats(object);
+
+      const modelId = `model_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      return {
+        id: modelId,
+        name: filename,
+        object,
+        visible: true,
+        stats,
+        animations,
+      };
+    } finally {
+      URL.revokeObjectURL(url);
     }
-
-    normalizeModelPosition(object, existingModels);
-    const stats = calculateModelStats(object);
-
-    const modelId = `model_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-    return {
-      id: modelId,
-      name: filename,
-      object,
-      visible: true,
-      stats,
-      animations,
-    };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  });
 }
 
 /**
@@ -223,6 +426,7 @@ export function createDemoModel(existingModels: LoadedModel[]): LoadedModel {
   baseMesh.receiveShadow = true;
   group.add(baseMesh);
 
+  optimizeMeshHierarchy(group);
   normalizeModelPosition(group, existingModels);
   const stats = calculateModelStats(group);
 
@@ -240,40 +444,91 @@ export function createDemoModel(existingModels: LoadedModel[]): LoadedModel {
 }
 
 /**
- * Traverses an Object3D hierarchy and disposes all geometries, textures, and materials.
+ * Traverses an Object3D hierarchy and deeply disposes all geometries, textures,
+ * materials, and skeleton buffers to prevent VRAM memory leaks.
  */
 export function dispose3DObject(object: THREE.Object3D): void {
+  if (!object) return;
+
+  const disposedTextures = new Set<string>();
+  const disposedMaterials = new Set<string>();
+  const disposedGeometries = new Set<string>();
+
+  const disposeTexture = (tex: any) => {
+    if (tex && typeof tex.dispose === 'function' && !disposedTextures.has(tex.uuid)) {
+      disposedTextures.add(tex.uuid);
+      tex.dispose();
+    }
+  };
+
+  const disposeMaterial = (mat: THREE.Material) => {
+    if (!mat || disposedMaterials.has(mat.uuid)) return;
+    disposedMaterials.add(mat.uuid);
+
+    const matAny = mat as any;
+    // Dispose standard textures
+    const textureProps = [
+      'map',
+      'lightMap',
+      'bumpMap',
+      'normalMap',
+      'specularMap',
+      'envMap',
+      'alphaMap',
+      'roughnessMap',
+      'metalnessMap',
+      'emissiveMap',
+      'displacementMap',
+      'clearcoatMap',
+      'clearcoatRoughnessMap',
+      'clearcoatNormalMap',
+      'transmissionMap',
+      'thicknessMap',
+      'sheenColorMap',
+      'sheenRoughnessMap',
+      'iridescenceMap',
+      'iridescenceThicknessMap',
+      'anisotropyMap',
+      'gradientMap',
+    ];
+
+    for (const prop of textureProps) {
+      disposeTexture(matAny[prop]);
+    }
+
+    // Check custom shader uniforms if any
+    if (matAny.uniforms) {
+      for (const key of Object.keys(matAny.uniforms)) {
+        const val = matAny.uniforms[key]?.value;
+        if (val && (val.isTexture || val.isWebGLRenderTarget)) {
+          disposeTexture(val);
+        }
+      }
+    }
+
+    mat.dispose();
+  };
+
   object.traverse((child) => {
     if (child instanceof THREE.Mesh || child instanceof THREE.Points || child instanceof THREE.Line) {
-      if (child.geometry) {
+      // 1. Dispose Geometry
+      if (child.geometry && !disposedGeometries.has(child.geometry.uuid)) {
+        disposedGeometries.add(child.geometry.uuid);
         child.geometry.dispose();
       }
 
+      // 2. Dispose Materials & Textures
       if (child.material) {
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((mat) => {
-          // Dispose all texture maps
-          const matAny = mat as any;
-          [
-            'map',
-            'lightMap',
-            'bumpMap',
-            'normalMap',
-            'specularMap',
-            'envMap',
-            'alphaMap',
-            'roughnessMap',
-            'metalnessMap',
-            'emissiveMap',
-            'displacementMap',
-          ].forEach((prop) => {
-            if (matAny[prop] && typeof matAny[prop].dispose === 'function') {
-              matAny[prop].dispose();
-            }
-          });
+        if (Array.isArray(child.material)) {
+          child.material.forEach((mat) => disposeMaterial(mat));
+        } else {
+          disposeMaterial(child.material);
+        }
+      }
 
-          mat.dispose();
-        });
+      // 3. Dispose Skeleton / SkinnedMesh bones if present
+      if ((child as any).skeleton && typeof (child as any).skeleton.dispose === 'function') {
+        (child as any).skeleton.dispose();
       }
     }
   });

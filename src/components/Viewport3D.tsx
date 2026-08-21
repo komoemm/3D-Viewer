@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
@@ -11,6 +11,7 @@ import {
   RenderMode,
   CameraView,
 } from '../types';
+import { dispose3DObject } from '../utils/modelLoaders';
 
 interface Viewport3DProps {
   models: LoadedModel[];
@@ -46,6 +47,7 @@ export interface ViewportHandle {
   dolly: (deltaY: number) => void;
   pan: (deltaX: number, deltaY: number) => void;
   captureScreenshot: () => string;
+  requestRender: () => void;
 }
 
 export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
@@ -79,6 +81,15 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
   ) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    // On-demand rendering request frame counter
+    const needsRenderRef = useRef<number>(3);
+    const requestRender = useCallback(() => {
+      needsRenderRef.current = Math.max(needsRenderRef.current, 3);
+    }, []);
+
+    // Track override materials created for custom render modes (wireframe/normals/xray/points)
+    const overrideMaterialsRef = useRef<THREE.Material[]>([]);
 
     // Camera target position transition ref
     const targetCameraPos = useRef<THREE.Vector3 | null>(null);
@@ -121,6 +132,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       autoRotate,
       rotateSpeed,
       onFpsUpdate,
+      isAnimPlaying,
     });
 
     useEffect(() => {
@@ -134,8 +146,22 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         autoRotate,
         rotateSpeed,
         onFpsUpdate,
+        isAnimPlaying,
       };
+      requestRender();
     });
+
+    // Helper to safely dispose temporary override materials
+    const disposeOverrideMaterials = useCallback(() => {
+      if (overrideMaterialsRef.current.length > 0) {
+        overrideMaterialsRef.current.forEach((mat) => {
+          if (mat && typeof mat.dispose === 'function') {
+            mat.dispose();
+          }
+        });
+        overrideMaterialsRef.current = [];
+      }
+    }, []);
 
     // Initialize Three.js scene
     useEffect(() => {
@@ -171,7 +197,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         ? orthoCamera
         : camera;
 
-      // 3. Renderer
+      // 3. Renderer with capped DPR
       const renderer = new THREE.WebGLRenderer({
         canvas,
         antialias: true,
@@ -186,12 +212,16 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.0;
 
-      // 4. OrbitControls
+      // 4. OrbitControls with change listener for on-demand rendering
       const controls = new OrbitControls(activeCamera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.06;
       controls.maxDistance = 300;
       controls.minDistance = 0.15;
+
+      controls.addEventListener('change', () => {
+        requestRender();
+      });
 
       // 5. TransformControls
       const transformControls = new TransformControls(activeCamera, renderer.domElement);
@@ -201,9 +231,14 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         : (transformControls as unknown as THREE.Object3D);
       scene.add(gizmoHelper);
 
+      transformControls.addEventListener('change', () => {
+        requestRender();
+      });
+
       // Disable orbit controls while dragging gizmo
       transformControls.addEventListener('dragging-changed', (event) => {
         controls.enabled = !event.value;
+        requestRender();
       });
 
       // Synchronize changes made with gizmo back to React state
@@ -239,9 +274,10 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         if (threeRef.current?.bboxHelper) {
           threeRef.current.bboxHelper.update();
         }
+        requestRender();
       });
 
-      // 6. Lights (Blender Studio 3-Point Setup)
+      // 6. Optimized Lights (Blender Studio 3-Point Setup with 1024x1024 shadow map)
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
       scene.add(ambientLight);
 
@@ -252,11 +288,17 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
       dirLight.position.set(5, 12, 7);
       dirLight.castShadow = true;
-      dirLight.shadow.mapSize.width = 2048;
-      dirLight.shadow.mapSize.height = 2048;
+      // Optimized shadow map resolution to reduce GPU memory footprint
+      dirLight.shadow.mapSize.width = 1024;
+      dirLight.shadow.mapSize.height = 1024;
       dirLight.shadow.camera.near = 0.5;
-      dirLight.shadow.camera.far = 40;
-      dirLight.shadow.bias = -0.0001;
+      dirLight.shadow.camera.far = 35;
+      dirLight.shadow.camera.left = -14;
+      dirLight.shadow.camera.right = 14;
+      dirLight.shadow.camera.top = 14;
+      dirLight.shadow.camera.bottom = -14;
+      dirLight.shadow.bias = -0.0005;
+      dirLight.shadow.normalBias = 0.02;
       scene.add(dirLight);
 
       const dirLight2 = new THREE.DirectionalLight(0xe2e8f0, 0.4);
@@ -315,7 +357,8 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
           mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
           mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-          raycaster.setFromCamera(mouse, camera);
+          const currentCam = threeRef.current.activeCamera || camera;
+          raycaster.setFromCamera(mouse, currentCam);
 
           const currentModels = propsRef.current.models;
           const rootObjects = currentModels.filter((m) => m.visible).map((m) => m.object);
@@ -334,6 +377,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
 
             if (matchedModel) {
               propsRef.current.onSelectModel(matchedModel.id);
+              requestRender();
             }
           }
         }
@@ -369,7 +413,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         lastTime: performance.now(),
       };
 
-      // Resize observer
+      // Resize observer with DPR capping
       const resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
           const w = entry.contentRect.width;
@@ -389,15 +433,39 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
             orthoCamera.updateProjectionMatrix();
 
             renderer.setSize(w, h);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            requestRender();
           }
         }
       });
       resizeObserver.observe(containerRef.current);
 
-      // Render loop
+      // On-Demand & Continuous Adaptive Render Loop
       let animId: number;
       const animate = () => {
         animId = requestAnimationFrame(animate);
+
+        const isAutoRotating = propsRef.current.autoRotate && propsRef.current.models.length > 0;
+        const isPlayingAnim = propsRef.current.isAnimPlaying && !!threeRef.current?.mixer;
+        const isLerping = !!targetCameraPos.current || !!targetControlsTarget.current;
+        const isInteracting =
+          (threeRef.current?.controls as any)?.state !== -1 ||
+          (threeRef.current?.transformControls as any)?.dragging;
+
+        const shouldRender =
+          isAutoRotating ||
+          isPlayingAnim ||
+          isLerping ||
+          isInteracting ||
+          needsRenderRef.current > 0;
+
+        if (needsRenderRef.current > 0) {
+          needsRenderRef.current--;
+        }
+
+        if (!shouldRender) {
+          return;
+        }
 
         const delta = clock.getDelta();
 
@@ -421,18 +489,19 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
 
         // Smooth camera transition if active
         if (targetCameraPos.current && targetControlsTarget.current) {
-          currentActiveCam.position.lerp(targetCameraPos.current, 0.12);
-          controls.target.lerp(targetControlsTarget.current, 0.12);
+          currentActiveCam.position.lerp(targetCameraPos.current, 0.14);
+          controls.target.lerp(targetControlsTarget.current, 0.14);
 
           if (
-            currentActiveCam.position.distanceTo(targetCameraPos.current) < 0.01 &&
-            controls.target.distanceTo(targetControlsTarget.current) < 0.01
+            currentActiveCam.position.distanceTo(targetCameraPos.current) < 0.005 &&
+            controls.target.distanceTo(targetControlsTarget.current) < 0.005
           ) {
             currentActiveCam.position.copy(targetCameraPos.current);
             controls.target.copy(targetControlsTarget.current);
             targetCameraPos.current = null;
             targetControlsTarget.current = null;
           }
+          requestRender();
         }
 
         // Update ViewportGizmo quaternion ref
@@ -441,20 +510,26 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         }
 
         // Update animation mixer if playing
-        if (threeRef.current?.mixer) {
+        if (isPlayingAnim && threeRef.current?.mixer) {
           threeRef.current.mixer.update(delta);
+          requestRender();
         }
 
         // Auto rotate logic
-        if (propsRef.current.autoRotate && propsRef.current.models.length > 0) {
+        if (isAutoRotating) {
           propsRef.current.models.forEach((m) => {
             if (m.visible && m.object) {
               m.object.rotation.y += 0.006 * propsRef.current.rotateSpeed;
             }
           });
+          requestRender();
         }
 
-        controls.update();
+        const controlsChanged = controls.update();
+        if (controlsChanged) {
+          requestRender();
+        }
+
         renderer.render(scene, currentActiveCam);
       };
       animate();
@@ -464,10 +539,42 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         resizeObserver.disconnect();
         canvas.removeEventListener('pointerdown', handlePointerDown);
         canvas.removeEventListener('pointerup', handlePointerUp);
-        transformControls.dispose();
-        renderer.dispose();
+
+        disposeOverrideMaterials();
+
+        // Explicit cleanup of scene objects, helpers, and renderer
+        if (threeRef.current) {
+          const { gridHelper, groundAxesHelper, axesHelper, bboxHelper, transformControls, renderer, scene } = threeRef.current;
+          
+          if (gridHelper) {
+            gridHelper.geometry?.dispose();
+            if (Array.isArray(gridHelper.material)) gridHelper.material.forEach((m) => m.dispose());
+            else gridHelper.material?.dispose();
+          }
+
+          if (groundAxesHelper) {
+            groundAxesHelper.traverse((child: any) => {
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) child.material.dispose();
+            });
+          }
+
+          if (axesHelper) {
+            axesHelper.geometry?.dispose();
+            (axesHelper.material as any)?.dispose?.();
+          }
+
+          if (bboxHelper) {
+            bboxHelper.geometry?.dispose();
+            (bboxHelper.material as any)?.dispose?.();
+          }
+
+          transformControls.dispose();
+          renderer.dispose();
+          scene.clear();
+        }
       };
-    }, []);
+    }, [disposeOverrideMaterials, requestRender]);
 
     // Sync Orthographic Projection Mode
     useEffect(() => {
@@ -503,9 +610,10 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         threeRef.current.activeCamera = camera;
       }
       controls.update();
-    }, [isOrthographic]);
+      requestRender();
+    }, [isOrthographic, requestRender]);
 
-    // Sync Scene Models & Meshes
+    // Sync Scene Models, Meshes, and Frustum Culling
     useEffect(() => {
       if (!threeRef.current) return;
       const { scene, originalMaterials } = threeRef.current;
@@ -517,7 +625,14 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         model.object.visible = model.visible;
 
         model.object.traverse((child) => {
-          if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+          if (child instanceof THREE.Mesh || child instanceof THREE.Points || child instanceof THREE.Line) {
+            // Enable Frustum Culling and pre-compute bounding spheres/boxes
+            child.frustumCulled = true;
+            if (child.geometry) {
+              if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
+              if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+            }
+
             if (!originalMaterials.has(child.uuid) && child.material) {
               originalMaterials.set(child.uuid, child.material);
             }
@@ -525,21 +640,31 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         });
       });
 
+      // Remove orphaned objects that are no longer in models list
       const modelObjects = new Set(models.map((m) => m.object));
       scene.children.forEach((child) => {
         if (
           child instanceof THREE.Group ||
           child instanceof THREE.Mesh ||
-          child instanceof THREE.Points
+          child instanceof THREE.Points ||
+          child instanceof THREE.Line
         ) {
-          if (child !== threeRef.current?.gridHelper && child !== threeRef.current?.axesHelper && !modelObjects.has(child)) {
+          if (
+            child !== threeRef.current?.gridHelper &&
+            child !== threeRef.current?.groundAxesHelper &&
+            child !== threeRef.current?.axesHelper &&
+            child !== threeRef.current?.bboxHelper &&
+            !modelObjects.has(child)
+          ) {
             if (!(child as any).isTransformControls) {
               scene.remove(child);
             }
           }
         }
       });
-    }, [models]);
+
+      requestRender();
+    }, [models, requestRender]);
 
     // Attach / Detach TransformControls to active model
     useEffect(() => {
@@ -558,8 +683,10 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         transformControls.visible = false;
       }
 
-      // Update Bounding Box Helper
+      // Update Bounding Box Helper with explicit resource disposal
       if (threeRef.current.bboxHelper) {
+        threeRef.current.bboxHelper.geometry?.dispose();
+        (threeRef.current.bboxHelper.material as any)?.dispose?.();
         scene.remove(threeRef.current.bboxHelper);
         threeRef.current.bboxHelper = null;
       }
@@ -569,7 +696,9 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         scene.add(bbox);
         threeRef.current.bboxHelper = bbox;
       }
-    }, [selectedModelId, gizmoMode, transformSpace, models, showBBox]);
+
+      requestRender();
+    }, [selectedModelId, gizmoMode, transformSpace, models, showBBox, requestRender]);
 
     // Apply numerical Transform updates to selected model
     useEffect(() => {
@@ -589,7 +718,9 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       if (threeRef.current.bboxHelper) {
         threeRef.current.bboxHelper.update();
       }
-    }, [transformValues, selectedModelId, models]);
+
+      requestRender();
+    }, [transformValues, selectedModelId, models, requestRender]);
 
     // Update Lighting Presets & Intensity
     useEffect(() => {
@@ -647,13 +778,16 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
           hemiLight.groundColor.setHex(0x0f172a);
           break;
       }
-    }, [lightingPreset, lightIntensity]);
+
+      requestRender();
+    }, [lightingPreset, lightIntensity, requestRender]);
 
     // Update Background Color
     useEffect(() => {
       if (!threeRef.current) return;
       threeRef.current.scene.background = new THREE.Color(bgColor);
-    }, [bgColor]);
+      requestRender();
+    }, [bgColor, requestRender]);
 
     // Update Grid & Axes Helper
     useEffect(() => {
@@ -661,7 +795,8 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       threeRef.current.gridHelper.visible = showGrid;
       threeRef.current.groundAxesHelper.visible = showGrid;
       threeRef.current.axesHelper.visible = showAxes;
-    }, [showGrid, showAxes]);
+      requestRender();
+    }, [showGrid, showAxes, requestRender]);
 
     // Update Point Size for point clouds
     useEffect(() => {
@@ -674,12 +809,15 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
           }
         });
       });
-    }, [pointSize, models]);
+      requestRender();
+    }, [pointSize, models, requestRender]);
 
-    // Update Material Render Modes
+    // Update Material Render Modes with proper disposal of previous override materials
     useEffect(() => {
       if (!threeRef.current) return;
       const { originalMaterials } = threeRef.current;
+
+      disposeOverrideMaterials();
 
       models.forEach((m) => {
         if (m.object) {
@@ -690,31 +828,40 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
               if (renderMode === 'default') {
                 child.material = origMat;
               } else if (renderMode === 'wireframe') {
-                child.material = new THREE.MeshBasicMaterial({
+                const mat = new THREE.MeshBasicMaterial({
                   color: 0x60a5fa,
                   wireframe: true,
                 });
+                overrideMaterialsRef.current.push(mat);
+                child.material = mat;
               } else if (renderMode === 'normals') {
-                child.material = new THREE.MeshNormalMaterial();
+                const mat = new THREE.MeshNormalMaterial();
+                overrideMaterialsRef.current.push(mat);
+                child.material = mat;
               } else if (renderMode === 'xray') {
-                child.material = new THREE.MeshStandardMaterial({
+                const mat = new THREE.MeshStandardMaterial({
                   color: 0x3b82f6,
                   transparent: true,
                   opacity: 0.45,
                   roughness: 0.1,
                 });
+                overrideMaterialsRef.current.push(mat);
+                child.material = mat;
               } else if (renderMode === 'points') {
-                // If mesh is switched to point cloud mode
-                child.material = new THREE.MeshBasicMaterial({
+                const mat = new THREE.MeshBasicMaterial({
                   color: 0x38bdf8,
                   wireframe: true,
                 });
+                overrideMaterialsRef.current.push(mat);
+                child.material = mat;
               }
             }
           });
         }
       });
-    }, [renderMode, models]);
+
+      requestRender();
+    }, [renderMode, models, disposeOverrideMaterials, requestRender]);
 
     // Animation playback handling
     useEffect(() => {
@@ -750,10 +897,14 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         action.play();
         action.paused = true;
       }
-    }, [activeAnimIndex, isAnimPlaying, animSpeed, selectedModelId, models]);
+
+      requestRender();
+    }, [activeAnimIndex, isAnimPlaying, animSpeed, selectedModelId, models, requestRender]);
 
     // Expose methods to parent via ref
     React.useImperativeHandle(ref, () => ({
+      requestRender,
+
       focusModel: (id?: string) => {
         if (!threeRef.current) return;
         const { camera } = threeRef.current;
@@ -775,6 +926,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
           center.z + dist
         );
         targetControlsTarget.current = center.clone();
+        requestRender();
       },
 
       focusAll: () => {
@@ -800,6 +952,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
           center.z + dist
         );
         targetControlsTarget.current = center.clone();
+        requestRender();
       },
 
       setCameraView: (view: CameraView) => {
@@ -851,6 +1004,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
 
         targetCameraPos.current = newPos;
         targetControlsTarget.current = center.clone();
+        requestRender();
       },
 
       orbit: (deltaX: number, deltaY: number) => {
@@ -871,6 +1025,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         activeCamera.position.copy(controls.target).add(offset);
         activeCamera.lookAt(controls.target);
         controls.update();
+        requestRender();
       },
 
       dolly: (deltaY: number) => {
@@ -887,6 +1042,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
           orthoCamera.updateProjectionMatrix();
         }
         controls.update();
+        requestRender();
       },
 
       pan: (deltaX: number, deltaY: number) => {
@@ -904,6 +1060,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         activeCamera.position.add(panOffset);
         controls.target.add(panOffset);
         controls.update();
+        requestRender();
       },
 
       captureScreenshot: () => {
