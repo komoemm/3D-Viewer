@@ -1,0 +1,6 @@
+{
+  "name": "3D Studio Viewer",
+  "description": "Multi-Format 3D Web Inspector and viewer with multi-model support, lighting presets, materials, animation player, and transform controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
