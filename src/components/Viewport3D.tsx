@@ -574,6 +574,10 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
 
           transformControls.dispose();
           renderer.dispose();
+          prevModelsMapRef.current.forEach((obj) => {
+            dispose3DObject(obj);
+          });
+          prevModelsMapRef.current.clear();
           scene.clear();
         }
       };

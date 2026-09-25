@@ -189,6 +189,8 @@ export function normalizeModelPosition(object: THREE.Object3D, existingModels: L
   }
 }
 
+export const isThreeScript = (fileName: string): boolean => /\.(ts|js)$/i.test(fileName);
+
 /**
  * Loads a 3D model file and returns a LoadedModel object.
  * Processes via the globalModelLoadingQueue to limit concurrent decodes to 2 max.
@@ -348,9 +350,8 @@ export async function loadModelFile(file: File, existingModels: LoadedModel[]): 
           });
           object = new THREE.Mesh(geom, mat);
         }
-      } else if (ext === 'ts' || ext === 'js') {
-        const code = await file.text();
-        object = await executeThreeScript(code, filename);
+      } else if (isThreeScript(filename)) {
+        object = await loadThreeJsScript(file);
       } else {
         throw new Error(
           `Unsupported file format: .${ext}. Supported formats are .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ts, .js`
@@ -471,19 +472,22 @@ export function dispose3DObject(object: THREE.Object3D): void {
     disposedMaterials.add(mat.uuid);
 
     const matAny = mat as any;
-    // Dispose standard textures
+    // Explicit standard PBR texture map properties
     const textureProps = [
       'map',
-      'lightMap',
+      'aoMap',
+      'alphaMap',
       'bumpMap',
       'normalMap',
-      'specularMap',
-      'envMap',
-      'alphaMap',
+      'displacementMap',
       'roughnessMap',
       'metalnessMap',
       'emissiveMap',
-      'displacementMap',
+      'specularMap',
+      'specularColorMap',
+      'specularIntensityMap',
+      'envMap',
+      'lightMap',
       'clearcoatMap',
       'clearcoatRoughnessMap',
       'clearcoatNormalMap',
@@ -495,18 +499,37 @@ export function dispose3DObject(object: THREE.Object3D): void {
       'iridescenceThicknessMap',
       'anisotropyMap',
       'gradientMap',
+      'matcap',
     ];
 
     for (const prop of textureProps) {
-      disposeTexture(matAny[prop]);
+      if (matAny[prop]) {
+        disposeTexture(matAny[prop]);
+      }
+    }
+
+    // Traverse all keys on material to safely catch non-standard or dynamically attached textures
+    for (const key of Object.keys(matAny)) {
+      const val = matAny[key];
+      if (val && typeof val === 'object' && (val.isTexture || val.isWebGLRenderTarget)) {
+        disposeTexture(val);
+      }
     }
 
     // Check custom shader uniforms if any
     if (matAny.uniforms) {
       for (const key of Object.keys(matAny.uniforms)) {
         const val = matAny.uniforms[key]?.value;
-        if (val && (val.isTexture || val.isWebGLRenderTarget)) {
-          disposeTexture(val);
+        if (val && typeof val === 'object') {
+          if (val.isTexture || val.isWebGLRenderTarget) {
+            disposeTexture(val);
+          } else if (Array.isArray(val)) {
+            val.forEach((item) => {
+              if (item && (item.isTexture || item.isWebGLRenderTarget)) {
+                disposeTexture(item);
+              }
+            });
+          }
         }
       }
     }
@@ -544,94 +567,118 @@ export function dispose3DObject(object: THREE.Object3D): void {
 }
 
 /**
- * Dynamically transpiles and executes a Three.js TypeScript or JavaScript script.
- * Sucrase is loaded dynamically only when a script is executed to maintain bundle splitting.
+ * Loads and dynamically executes a Three.js script (.ts or .js).
+ * Supports TypeScript transpilation via Sucrase, CJS/ESM module interop,
+ * and async procedural model generator functions.
  */
-export async function executeThreeScript(code: string, filename: string): Promise<THREE.Object3D> {
-  // 1. Dynamic Dependency Loading
-  const { transform } = await import('sucrase');
+export async function loadThreeJsScript(file: File): Promise<THREE.Object3D> {
+  const filename = file.name;
+  const code = await file.text();
 
-  // 2. TypeScript & CommonJS Module Transpilation
-  let transpiled: string;
+  // 1. Dynamic Dependency Loading: Sucrase is loaded dynamically only when a script is executed
+  let transform: any;
   try {
-    transpiled = transform(code, { transforms: ['typescript', 'imports'] }).code;
+    const sucraseModule = await import('sucrase');
+    transform = sucraseModule.transform;
   } catch (err: any) {
-    throw new Error(`Syntax error in "${filename}": ${err?.message || err}`);
+    throw new Error(`TypeScript transpiler error: ${err?.message || err}`);
   }
 
-  // Execution sandbox with mock require
+  // 2. TypeScript & CommonJS Module Transpilation
+  let transpiledCode: string;
+  try {
+    transpiledCode = transform(code, { transforms: ['typescript', 'imports'] }).code;
+  } catch (err: any) {
+    throw new Error(`TypeScript syntax error in "${filename}": ${err?.message || err}`);
+  }
+
+  // 3. Robust Module Interop:
+  // To handle both `import * as THREE from 'three'` and `import THREE from 'three'`,
+  // create a proxy or decorated object where (threeExport as any).default = THREE.
+  const threeExport = new Proxy(THREE, {
+    get(target, prop, receiver) {
+      if (prop === 'default') return THREE;
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+  (threeExport as any).default = THREE;
+
+  // Custom require function that maps 'three' and 'three/*' to this decorated Three object
   const customRequire = (moduleName: string) => {
-    if (moduleName === 'three' || moduleName.startsWith('three/')) return THREE;
+    if (moduleName === 'three' || moduleName.startsWith('three/')) {
+      return threeExport;
+    }
     throw new Error(`Module "${moduleName}" cannot be resolved. Only "three" is supported.`);
   };
 
   const moduleObj: { exports: any } = { exports: {} };
   const exportsObj = moduleObj.exports;
 
+  // Execute transpiled code in a try-catch block using new Function('THREE', 'require', 'exports', 'module', transpiledCode)
   try {
-    const fn = new Function('THREE', 'require', 'exports', 'module', transpiled);
-    fn(THREE, customRequire, exportsObj, moduleObj);
+    const fn = new Function('THREE', 'require', 'exports', 'module', transpiledCode);
+    fn(threeExport, customRequire, exportsObj, moduleObj);
   } catch (err: any) {
-    throw new Error(`Execution error in "${filename}": ${err?.message || err}`);
+    throw new Error(`Runtime execution error in "${filename}": ${err?.message || err}`);
   }
 
-  // 3. Extract model from module.exports.default, named export functions (e.g., createModel(), default()),
-  // or direct Object3D exports. Ensure output instanceof THREE.Object3D.
-  let output: any = null;
+  // 4. Support ASYNC model generators:
+  // Inspect module.exports.default, named exports (e.g., createModel, generateMesh), or any exported function.
+  // Await the result if it returns a Promise.
   const modExports = moduleObj.exports;
+  const candidateExports: any[] = [];
 
-  if (modExports instanceof THREE.Object3D) {
-    output = modExports;
-  } else if (typeof modExports === 'function') {
-    output = modExports();
-  } else if (modExports && typeof modExports === 'object') {
-    if (modExports.default instanceof THREE.Object3D) {
-      output = modExports.default;
-    } else if (typeof modExports.default === 'function') {
-      output = modExports.default();
-    } else if (typeof modExports.createModel === 'function') {
-      output = modExports.createModel();
-    } else if (modExports.model instanceof THREE.Object3D) {
-      output = modExports.model;
-    } else if (typeof modExports.model === 'function') {
-      output = modExports.model();
-    } else if (modExports.scene instanceof THREE.Object3D) {
-      output = modExports.scene;
-    } else {
-      // Check other exported properties or functions
-      for (const key of Object.keys(modExports)) {
-        if (key === '__esModule') continue;
-        const candidate = modExports[key];
-        if (candidate instanceof THREE.Object3D) {
-          output = candidate;
-          break;
-        } else if (typeof candidate === 'function') {
-          try {
-            const res = candidate();
-            if (res instanceof THREE.Object3D || res instanceof Promise) {
-              output = res;
-              break;
-            }
-          } catch {
-            // Non-instantiating function, proceed to next
-          }
-        }
+  if (modExports && typeof modExports === 'object') {
+    // Priority order: default, createModel, generateMesh, model, scene
+    if (modExports.default !== undefined) candidateExports.push(modExports.default);
+    if (modExports.createModel !== undefined) candidateExports.push(modExports.createModel);
+    if (modExports.generateMesh !== undefined) candidateExports.push(modExports.generateMesh);
+    if (modExports.model !== undefined) candidateExports.push(modExports.model);
+    if (modExports.scene !== undefined) candidateExports.push(modExports.scene);
+
+    // Any other exported candidates
+    for (const [key, val] of Object.entries(modExports)) {
+      if (key !== '__esModule' && !candidateExports.includes(val)) {
+        candidateExports.push(val);
       }
+    }
+  } else if (modExports !== undefined) {
+    candidateExports.push(modExports);
+  }
+
+  let finalResult: THREE.Object3D | null = null;
+
+  for (const candidateExport of candidateExports) {
+    if (candidateExport === undefined || candidateExport === null) continue;
+    try {
+      let result = typeof candidateExport === 'function' ? candidateExport(threeExport) : candidateExport;
+      result = await Promise.resolve(result);
+
+      if (result instanceof THREE.Object3D) {
+        finalResult = result;
+        break;
+      }
+    } catch (evalErr: any) {
+      throw new Error(`Runtime execution error in "${filename}": ${evalErr?.message || evalErr}`);
     }
   }
 
-  // Support async function / Promise returning THREE.Object3D
-  if (output instanceof Promise) {
-    output = await output;
-  }
-
-  if (!(output instanceof THREE.Object3D)) {
+  // 5. Strictly assert result instanceof THREE.Object3D
+  if (!finalResult || !(finalResult instanceof THREE.Object3D)) {
     throw new Error(
-      `No valid THREE.Object3D is returned from "${filename}". Make sure to export a THREE.Object3D instance or a function like "export default () => new THREE.Mesh(...)" or "export function createModel()".`
+      `Missing Object3D export in "${filename}": Script did not return or export a valid THREE.Object3D. Export an Object3D or an (async) function like "export default () => new THREE.Mesh(...)", "export async function createModel()", or "export function generateMesh()".`
     );
   }
 
-  return output;
+  return finalResult;
+}
+
+/**
+ * Dynamically transpiles and executes a Three.js TypeScript or JavaScript script.
+ */
+export async function executeThreeScript(code: string, filename: string): Promise<THREE.Object3D> {
+  const file = new File([code], filename, { type: 'application/typescript' });
+  return loadThreeJsScript(file);
 }
 
 /**
@@ -644,7 +691,7 @@ export function createSampleScriptFile(): File {
  * Procedural Cyber Crystal with Quantum Orbital Rings
  * Generated dynamically via Three.js TypeScript execution!
  */
-export function createModel(): THREE.Object3D {
+export async function createModel(): Promise<THREE.Object3D> {
   const group = new THREE.Group();
   group.name = 'CyberCrystal_TS_Group';
 

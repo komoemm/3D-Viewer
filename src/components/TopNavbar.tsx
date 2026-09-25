@@ -33,6 +33,7 @@ import {
   LightingPreset,
   RenderMode,
   GizmoMode,
+  ACCEPTED_FILE_EXTENSIONS,
 } from '../types';
 
 interface TopNavbarProps {
@@ -185,7 +186,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ts,.js,text/javascript,application/typescript"
+        accept={ACCEPTED_FILE_EXTENSIONS}
         multiple
         onChange={handleFileChange}
         className="hidden"

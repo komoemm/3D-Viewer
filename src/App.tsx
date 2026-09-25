@@ -169,6 +169,12 @@ export default function App() {
   // Generate and Load Sample TypeScript Three.js Script
   const handleLoadSampleScript = () => {
     const sampleFile = createSampleScriptFile();
+    // Safely dispose any previous procedural model with the same name before mounting
+    const existing = models.find((m) => m.name === sampleFile.name);
+    if (existing) {
+      dispose3DObject(existing.object);
+      setModels((prev) => prev.filter((m) => m.id !== existing.id));
+    }
     handleFilesSelected([sampleFile]);
   };
 
@@ -504,6 +510,7 @@ export default function App() {
         }}
         onLoadDemo={handleGenerateDemo}
         onLoadSampleScript={handleLoadSampleScript}
+        onFilesSelected={handleFilesSelected}
       />
 
       {/* 6. Non-blocking Toast Alerts */}
