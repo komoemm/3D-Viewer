@@ -91,6 +91,9 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
     // Track override materials created for custom render modes (wireframe/normals/xray/points)
     const overrideMaterialsRef = useRef<THREE.Material[]>([]);
 
+    // Track previously mounted model Object3D instances for safe GPU memory disposal
+    const prevModelsMapRef = useRef<Map<string, THREE.Object3D>>(new Map());
+
     // Camera target position transition ref
     const targetCameraPos = useRef<THREE.Vector3 | null>(null);
     const targetControlsTarget = useRef<THREE.Vector3 | null>(null);
@@ -618,6 +621,20 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       if (!threeRef.current) return;
       const { scene, originalMaterials } = threeRef.current;
 
+      // 1. Before mounting new or updated models, safely traverse and dispose of previous geometries,
+      // materials, and textures to prevent WebGL GPU memory leaks.
+      const currentModelMap = new Map(models.map((m) => [m.id, m.object]));
+      prevModelsMapRef.current.forEach((prevObj, id) => {
+        const currentObj = currentModelMap.get(id);
+        // If a model was removed or replaced with a new Object3D reference
+        if (!currentObj || currentObj !== prevObj) {
+          scene.remove(prevObj);
+          dispose3DObject(prevObj);
+        }
+      });
+      prevModelsMapRef.current = currentModelMap;
+
+      // 2. Mount and configure new models
       models.forEach((model) => {
         if (!scene.children.includes(model.object)) {
           scene.add(model.object);
@@ -640,7 +657,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         });
       });
 
-      // Remove orphaned objects that are no longer in models list
+      // 3. Remove and dispose any orphaned objects that are no longer in models list
       const modelObjects = new Set(models.map((m) => m.object));
       scene.children.forEach((child) => {
         if (
@@ -658,6 +675,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
           ) {
             if (!(child as any).isTransformControls) {
               scene.remove(child);
+              dispose3DObject(child);
             }
           }
         }

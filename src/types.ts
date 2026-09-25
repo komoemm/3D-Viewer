@@ -42,3 +42,28 @@ export interface ToastMessage {
   message: string;
   type: 'info' | 'success' | 'error';
 }
+
+export type SupportedFileFormat =
+  | 'glb'
+  | 'gltf'
+  | 'fbx'
+  | 'ply'
+  | 'spz'
+  | 'obj'
+  | 'stl'
+  | 'ts'
+  | 'js';
+
+export const SUPPORTED_FILE_EXTENSIONS: readonly SupportedFileFormat[] = [
+  'glb',
+  'gltf',
+  'fbx',
+  'ply',
+  'spz',
+  'obj',
+  'stl',
+  'ts',
+  'js',
+] as const;
+
+export const ACCEPTED_FILE_EXTENSIONS = '.glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ts,.js,text/javascript,application/typescript';

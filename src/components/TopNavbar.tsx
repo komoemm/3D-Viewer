@@ -185,7 +185,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".glb,.gltf,.fbx,.ply,.spz,.obj,.stl"
+        accept=".glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ts,.js,text/javascript,application/typescript"
         multiple
         onChange={handleFileChange}
         className="hidden"

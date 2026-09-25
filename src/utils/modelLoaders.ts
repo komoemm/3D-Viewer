@@ -348,8 +348,13 @@ export async function loadModelFile(file: File, existingModels: LoadedModel[]): 
           });
           object = new THREE.Mesh(geom, mat);
         }
+      } else if (ext === 'ts' || ext === 'js') {
+        const code = await file.text();
+        object = await executeThreeScript(code, filename);
       } else {
-        throw new Error(`Unsupported file format: .${ext}`);
+        throw new Error(
+          `Unsupported file format: .${ext}. Supported formats are .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ts, .js`
+        );
       }
 
       if (!object) {
@@ -536,4 +541,188 @@ export function dispose3DObject(object: THREE.Object3D): void {
   if (object.parent) {
     object.parent.remove(object);
   }
+}
+
+/**
+ * Dynamically transpiles and executes a Three.js TypeScript or JavaScript script.
+ * Sucrase is loaded dynamically only when a script is executed to maintain bundle splitting.
+ */
+export async function executeThreeScript(code: string, filename: string): Promise<THREE.Object3D> {
+  // 1. Dynamic Dependency Loading
+  const { transform } = await import('sucrase');
+
+  // 2. TypeScript & CommonJS Module Transpilation
+  let transpiled: string;
+  try {
+    transpiled = transform(code, { transforms: ['typescript', 'imports'] }).code;
+  } catch (err: any) {
+    throw new Error(`Syntax error in "${filename}": ${err?.message || err}`);
+  }
+
+  // Execution sandbox with mock require
+  const customRequire = (moduleName: string) => {
+    if (moduleName === 'three' || moduleName.startsWith('three/')) return THREE;
+    throw new Error(`Module "${moduleName}" cannot be resolved. Only "three" is supported.`);
+  };
+
+  const moduleObj: { exports: any } = { exports: {} };
+  const exportsObj = moduleObj.exports;
+
+  try {
+    const fn = new Function('THREE', 'require', 'exports', 'module', transpiled);
+    fn(THREE, customRequire, exportsObj, moduleObj);
+  } catch (err: any) {
+    throw new Error(`Execution error in "${filename}": ${err?.message || err}`);
+  }
+
+  // 3. Extract model from module.exports.default, named export functions (e.g., createModel(), default()),
+  // or direct Object3D exports. Ensure output instanceof THREE.Object3D.
+  let output: any = null;
+  const modExports = moduleObj.exports;
+
+  if (modExports instanceof THREE.Object3D) {
+    output = modExports;
+  } else if (typeof modExports === 'function') {
+    output = modExports();
+  } else if (modExports && typeof modExports === 'object') {
+    if (modExports.default instanceof THREE.Object3D) {
+      output = modExports.default;
+    } else if (typeof modExports.default === 'function') {
+      output = modExports.default();
+    } else if (typeof modExports.createModel === 'function') {
+      output = modExports.createModel();
+    } else if (modExports.model instanceof THREE.Object3D) {
+      output = modExports.model;
+    } else if (typeof modExports.model === 'function') {
+      output = modExports.model();
+    } else if (modExports.scene instanceof THREE.Object3D) {
+      output = modExports.scene;
+    } else {
+      // Check other exported properties or functions
+      for (const key of Object.keys(modExports)) {
+        if (key === '__esModule') continue;
+        const candidate = modExports[key];
+        if (candidate instanceof THREE.Object3D) {
+          output = candidate;
+          break;
+        } else if (typeof candidate === 'function') {
+          try {
+            const res = candidate();
+            if (res instanceof THREE.Object3D || res instanceof Promise) {
+              output = res;
+              break;
+            }
+          } catch {
+            // Non-instantiating function, proceed to next
+          }
+        }
+      }
+    }
+  }
+
+  // Support async function / Promise returning THREE.Object3D
+  if (output instanceof Promise) {
+    output = await output;
+  }
+
+  if (!(output instanceof THREE.Object3D)) {
+    throw new Error(
+      `No valid THREE.Object3D is returned from "${filename}". Make sure to export a THREE.Object3D instance or a function like "export default () => new THREE.Mesh(...)" or "export function createModel()".`
+    );
+  }
+
+  return output;
+}
+
+/**
+ * Creates a sample TypeScript script file that dynamically creates a procedural 3D sculpture.
+ */
+export function createSampleScriptFile(): File {
+  const sampleScript = `import * as THREE from 'three';
+
+/**
+ * Procedural Cyber Crystal with Quantum Orbital Rings
+ * Generated dynamically via Three.js TypeScript execution!
+ */
+export function createModel(): THREE.Object3D {
+  const group = new THREE.Group();
+  group.name = 'CyberCrystal_TS_Group';
+
+  // 1. Central Prismatic Core
+  const coreGeo = new THREE.OctahedronGeometry(1.2, 0);
+  const coreMat = new THREE.MeshPhysicalMaterial({
+    color: 0x38bdf8,
+    emissive: 0x0369a1,
+    emissiveIntensity: 0.35,
+    roughness: 0.08,
+    metalness: 0.2,
+    transmission: 0.65,
+    ior: 1.52,
+    thickness: 1.5,
+  });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  core.position.y = 1.5;
+  core.castShadow = true;
+  group.add(core);
+
+  // 2. Translucent Faceted Outer Cage
+  const cageGeo = new THREE.IcosahedronGeometry(1.45, 1);
+  const cageMat = new THREE.MeshBasicMaterial({
+    color: 0x818cf8,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.5,
+  });
+  const cage = new THREE.Mesh(cageGeo, cageMat);
+  cage.position.y = 1.5;
+  group.add(cage);
+
+  // 3. Orbital Gyroscope Rings
+  const ringGeo = new THREE.TorusGeometry(1.9, 0.045, 16, 100);
+  
+  const ring1 = new THREE.Mesh(
+    ringGeo,
+    new THREE.MeshStandardMaterial({
+      color: 0xf43f5e,
+      roughness: 0.2,
+      metalness: 0.85,
+    })
+  );
+  ring1.position.y = 1.5;
+  ring1.rotation.x = Math.PI / 3;
+  group.add(ring1);
+
+  const ring2 = new THREE.Mesh(
+    ringGeo,
+    new THREE.MeshStandardMaterial({
+      color: 0x10b981,
+      roughness: 0.2,
+      metalness: 0.85,
+    })
+  );
+  ring2.position.y = 1.5;
+  ring2.rotation.y = Math.PI / 3;
+  group.add(ring2);
+
+  // 4. Futuristic Base Pedestal
+  const baseGeo = new THREE.CylinderGeometry(1.4, 1.7, 0.3, 32);
+  const baseMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    roughness: 0.3,
+    metalness: 0.6,
+  });
+  const base = new THREE.Mesh(baseGeo, baseMat);
+  base.position.y = 0.15;
+  base.receiveShadow = true;
+  group.add(base);
+
+  return group;
+}
+
+export default createModel;
+`;
+
+  return new File([sampleScript], 'Procedural_CyberCrystal.ts', {
+    type: 'application/typescript',
+  });
 }

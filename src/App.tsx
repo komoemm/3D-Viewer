@@ -17,7 +17,7 @@ import { Viewport3D, ViewportHandle } from './components/Viewport3D';
 import { DropzoneOverlay } from './components/DropzoneOverlay';
 import { ToastContainer } from './components/Toast';
 import { ShortcutsModal } from './components/ShortcutsModal';
-import { loadModelFile, createDemoModel, dispose3DObject } from './utils/modelLoaders';
+import { loadModelFile, createDemoModel, dispose3DObject, createSampleScriptFile } from './utils/modelLoaders';
 
 export default function App() {
   const viewportRef = useRef<ViewportHandle>(null);
@@ -119,7 +119,7 @@ export default function App() {
     const fileList = Array.from(files);
     if (fileList.length === 0) return;
 
-    addToast(`Queuing ${fileList.length} model(s) for loading...`, 'info');
+    addToast(`Queuing ${fileList.length} file(s) for loading...`, 'info');
 
     const loadedList: LoadedModel[] = [];
     let currentModels = [...models];
@@ -128,18 +128,33 @@ export default function App() {
       fileList.map(async (file) => {
         try {
           const loaded = await loadModelFile(file, currentModels);
+          
+          // Before mounting the new model, safely traverse and dispose of previous geometries,
+          // materials, and textures if replacing a model with the same name.
+          const existingIndex = currentModels.findIndex((m) => m.name === file.name);
+          if (existingIndex !== -1) {
+            const existingModel = currentModels[existingIndex];
+            dispose3DObject(existingModel.object);
+            currentModels = currentModels.filter((m) => m.id !== existingModel.id);
+            setModels((prev) => prev.filter((m) => m.id !== existingModel.id));
+          }
+
           loadedList.push(loaded);
           currentModels.push(loaded);
           addToast(`Loaded ${file.name}`, 'success');
         } catch (err: any) {
           console.error(err);
-          addToast(err.message || `Failed to load ${file.name}`, 'error');
+          addToast(err.message || `Failed to process ${file.name}`, 'error');
         }
       })
     );
 
     if (loadedList.length > 0) {
-      setModels((prev) => [...prev, ...loadedList]);
+      setModels((prev) => {
+        const loadedIds = new Set(loadedList.map((m) => m.id));
+        const filtered = prev.filter((m) => !loadedIds.has(m.id));
+        return [...filtered, ...loadedList];
+      });
       const lastLoaded = loadedList[loadedList.length - 1];
       setSelectedModelId(lastLoaded.id);
       syncTransformStateWithModel(lastLoaded);
@@ -149,6 +164,12 @@ export default function App() {
         viewportRef.current?.focusAll();
       }, 100);
     }
+  };
+
+  // Generate and Load Sample TypeScript Three.js Script
+  const handleLoadSampleScript = () => {
+    const sampleFile = createSampleScriptFile();
+    handleFilesSelected([sampleFile]);
   };
 
   // Generate Procedural Demo Model
@@ -482,6 +503,7 @@ export default function App() {
           input?.click();
         }}
         onLoadDemo={handleGenerateDemo}
+        onLoadSampleScript={handleLoadSampleScript}
       />
 
       {/* 6. Non-blocking Toast Alerts */}
