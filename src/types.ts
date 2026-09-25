@@ -16,6 +16,7 @@ export interface LoadedModel {
   wireframeOnly?: boolean;
   stats: ModelStats;
   animations: THREE.AnimationClip[];
+  isScript?: boolean;
 }
 
 export interface TransformValues {

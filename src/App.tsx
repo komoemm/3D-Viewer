@@ -73,9 +73,10 @@ export default function App() {
   const addToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
     const id = `toast_${Date.now()}_${Math.random()}`;
     setToasts((prev) => [...prev, { id, message, type }]);
+    const duration = type === 'error' ? 6500 : 3200;
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3200);
+    }, duration);
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -440,6 +441,7 @@ export default function App() {
         fps={fps}
         onFilesSelected={handleFilesSelected}
         onGenerateDemo={handleGenerateDemo}
+        onLoadSampleScript={handleLoadSampleScript}
         onTakeScreenshot={handleTakeScreenshot}
         onToggleShortcuts={() => setIsShortcutsOpen(true)}
         onSelectModel={handleSelectModel}
