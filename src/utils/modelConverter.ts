@@ -390,31 +390,195 @@ export async function convertObject3D(
 
 export type IFCConversionStep = 'Reading IFC' | 'Building Geometry' | 'Exporting GLB';
 
+export interface IFCConversionStats {
+  vertexCount: number;
+  triangleCount: number;
+  meshCount: number;
+}
+
+/**
+ * Yields execution back to the browser's main thread to allow layout/paint ticks,
+ * avoiding UI thread lockup and maintaining optimal Interaction to Next Paint (INP).
+ */
+const yieldToMain = (ms = 16): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Strict memory management for temporary IFC objects.
+ * Deeply traverses the hierarchy and disposes of all geometries, attributes,
+ * index buffers, morph attributes, materials, and textures, as well as web-ifc manager models,
+ * to guarantee complete cleanup of heap and GPU memory.
+ */
+export function disposeIFCTemporaryScene(root: THREE.Object3D | null | undefined): void {
+  if (!root) return;
+
+  const disposedGeometries = new Set<string>();
+  const disposedMaterials = new Set<string>();
+  const disposedTextures = new Set<string>();
+
+  const disposeTexture = (tex: any) => {
+    if (!tex || typeof tex !== 'object' || disposedTextures.has(tex.uuid)) return;
+    disposedTextures.add(tex.uuid);
+    try {
+      if (typeof tex.dispose === 'function') tex.dispose();
+      if (tex.image) {
+        if (typeof (tex.image as ImageBitmap).close === 'function') {
+          (tex.image as ImageBitmap).close();
+        }
+        tex.image = null;
+      }
+      if (tex.source) {
+        if (tex.source.data && typeof (tex.source.data as ImageBitmap).close === 'function') {
+          (tex.source.data as ImageBitmap).close();
+        }
+        tex.source.data = null;
+      }
+    } catch (_) {}
+  };
+
+  const disposeMaterial = (mat: THREE.Material) => {
+    if (!mat || typeof mat !== 'object' || disposedMaterials.has(mat.uuid)) return;
+    disposedMaterials.add(mat.uuid);
+
+    const matAny = mat as any;
+    const mapProps = [
+      'map',
+      'alphaMap',
+      'aoMap',
+      'bumpMap',
+      'displacementMap',
+      'emissiveMap',
+      'envMap',
+      'lightMap',
+      'metalnessMap',
+      'normalMap',
+      'roughnessMap',
+      'specularMap',
+      'gradientMap',
+    ];
+    for (const prop of mapProps) {
+      if (matAny[prop]) {
+        disposeTexture(matAny[prop]);
+        matAny[prop] = null;
+      }
+    }
+
+    try {
+      mat.dispose();
+    } catch (_) {}
+  };
+
+  const disposeGeometry = (geom: THREE.BufferGeometry) => {
+    if (!geom || typeof geom !== 'object' || disposedGeometries.has(geom.uuid)) return;
+    disposedGeometries.add(geom.uuid);
+
+    try {
+      if (geom.attributes) {
+        for (const key of Object.keys(geom.attributes)) {
+          const attr = geom.attributes[key];
+          if (attr && typeof (attr as any).dispose === 'function') {
+            (attr as any).dispose();
+          }
+        }
+      }
+      if (geom.index && typeof (geom.index as any).dispose === 'function') {
+        (geom.index as any).dispose();
+      }
+      if (geom.morphAttributes) {
+        for (const key of Object.keys(geom.morphAttributes)) {
+          const morphArr = geom.morphAttributes[key];
+          if (Array.isArray(morphArr)) {
+            morphArr.forEach((attr: any) => {
+              if (attr && typeof attr.dispose === 'function') {
+                attr.dispose();
+              }
+            });
+          }
+        }
+      }
+      geom.dispose();
+    } catch (_) {}
+  };
+
+  // Traverse the hierarchy to dispose all meshes, points, lines, geometries, and materials
+  root.traverse((child: any) => {
+    // If it's a web-ifc model, close it via ifcManager if available
+    if (child.modelID !== undefined && child.ifcManager) {
+      try {
+        child.ifcManager.close(child.modelID);
+      } catch (_) {}
+    }
+
+    if (child.geometry) {
+      disposeGeometry(child.geometry);
+      child.geometry = null;
+    }
+
+    if (child.material) {
+      if (Array.isArray(child.material)) {
+        child.material.forEach((m: THREE.Material) => disposeMaterial(m));
+      } else {
+        disposeMaterial(child.material);
+      }
+      child.material = null;
+    }
+  });
+
+  // Call disposeSceneHierarchy for any remaining scene elements
+  disposeSceneHierarchy(root);
+
+  // Detach all child nodes
+  while (root.children.length > 0) {
+    const child = root.children[0];
+    root.remove(child);
+  }
+
+  disposedGeometries.clear();
+  disposedMaterials.clear();
+  disposedTextures.clear();
+}
+
 /**
  * Converts raw IFC (Industry Foundation Classes) binary data into a binary GLB Blob.
  * Dynamically loads IFCLoader (via loadIFCModel) and GLTFExporter only when invoked,
- * protecting bundle size and Google Lighthouse metrics.
+ * protecting initial bundle size and Google Lighthouse metrics.
  *
  * 1. Parses the IFC model into a Three.js scene/group with coordinate centering
  * 2. Cleans up any unneeded helper objects, lights, cameras, or debug nodes
  * 3. Runs GLTFExporter.parse with binary: true
- * 4. Disposes of temporary scene memory and returns the resulting ArrayBuffer/Blob as a downloadable .glb file.
+ * 4. Strictly traverses and disposes of all temporary meshes, geometries, and materials
+ * 5. Returns the resulting binary GLB Blob.
  */
 export async function convertIFCToGLB(
   ifcData: ArrayBuffer,
-  onStepProgress?: (step: IFCConversionStep, percent: number) => void
+  onStepProgress?: (step: IFCConversionStep, percent: number) => void,
+  onStatsGathered?: (stats: IFCConversionStats) => void
 ): Promise<Blob> {
   // Step 1: Reading IFC
-  onStepProgress?.('Reading IFC', 20);
-  await new Promise((resolve) => setTimeout(resolve, 30));
+  onStepProgress?.('Reading IFC', 10);
+  await yieldToMain(25);
+
+  if (!ifcData || ifcData.byteLength === 0) {
+    throw new Error('IFC binary data is empty or invalid.');
+  }
+
+  onStepProgress?.('Reading IFC', 25);
+  await yieldToMain(20);
 
   // Step 2: Building Geometry
-  onStepProgress?.('Building Geometry', 40);
-  const ifcScene = await loadIFCModel(ifcData, (pct) => {
-    onStepProgress?.('Building Geometry', 20 + Math.round(pct * 0.45));
-  });
+  onStepProgress?.('Building Geometry', 35);
+  await yieldToMain(20);
 
+  let ifcScene: THREE.Object3D | null = null;
   try {
+    ifcScene = await loadIFCModel(ifcData, (pct) => {
+      const mappedPct = Math.round(35 + (pct / 100) * 35);
+      onStepProgress?.('Building Geometry', Math.min(68, mappedPct));
+    });
+
+    onStepProgress?.('Building Geometry', 70);
+    await yieldToMain(25);
+
     // Clean up any unneeded helper objects, cameras, lights, or debug gizmos
     const helpersToRemove: THREE.Object3D[] = [];
     ifcScene.traverse((child) => {
@@ -438,22 +602,37 @@ export async function convertIFCToGLB(
 
     ifcScene.updateMatrixWorld(true);
 
+    // Extract geometry stats before export & cleanup
+    const stats = inspectObjectGeometry(ifcScene);
+    onStatsGathered?.({
+      vertexCount: stats.vertexCount,
+      triangleCount: stats.triangleCount,
+      meshCount: Math.max(1, stats.meshCount),
+    });
+
     // Step 3: Exporting GLB
     onStepProgress?.('Exporting GLB', 75);
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await yieldToMain(25);
 
-    // Dynamically load GLTFExporter and export to binary GLB
-    const exporter = await getGLTFExporter();
+    // 1. Dynamic import for GLTFExporter to eliminate upfront bundle overhead
+    const { GLTFExporter } = await import('three/examples/jsm/exporters/GLTFExporter.js');
+    const exporter = new GLTFExporter();
 
+    onStepProgress?.('Exporting GLB', 85);
+    await yieldToMain(20);
+
+    // 2. Export options with { binary: true } to output .glb format
     const glbBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
       try {
         exporter.parse(
-          ifcScene,
+          ifcScene!,
           (result) => {
             if (result instanceof ArrayBuffer) {
               resolve(result);
+            } else if (result instanceof Uint8Array) {
+              resolve(result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength));
             } else {
-              reject(new Error('GLTFExporter did not return an ArrayBuffer for binary GLB export'));
+              reject(new Error('GLTFExporter failed to return a binary ArrayBuffer for .glb export'));
             }
           },
           (error) => {
@@ -470,13 +649,20 @@ export async function convertIFCToGLB(
       }
     });
 
+    onStepProgress?.('Exporting GLB', 98);
+    await yieldToMain(16);
+
+    const blob = new Blob([glbBuffer], { type: 'model/gltf-binary' });
     onStepProgress?.('Exporting GLB', 100);
 
-    // 4. Return resulting ArrayBuffer as a downloadable .glb Blob
-    return new Blob([glbBuffer], { type: 'model/gltf-binary' });
+    return blob;
   } finally {
-    // Thoroughly dispose temporary Three.js geometry, materials, and textures
-    disposeSceneHierarchy(ifcScene);
+    // 3. Strict Memory Management: traverse and dispose of all temporary meshes,
+    // geometries, and materials created during the IFC parsing phase once the GLB export completes
+    if (ifcScene) {
+      disposeIFCTemporaryScene(ifcScene);
+      ifcScene = null;
+    }
   }
 }
 
@@ -495,13 +681,21 @@ export async function convertUploadedFile(
   // Optimized direct path for IFC to GLB conversion
   if (ext === 'ifc' && targetFormat === 'glb') {
     const startTime = performance.now();
-    options.onProgress?.('Reading IFC', 15);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    options.onProgress?.('Reading IFC', 10);
+    await yieldToMain(30);
+
     const arrayBuffer = await file.arrayBuffer();
 
-    const blob = await convertIFCToGLB(arrayBuffer, (step, pct) => {
-      options.onProgress?.(step, pct);
-    });
+    let ifcStats: IFCConversionStats = { vertexCount: 0, triangleCount: 0, meshCount: 1 };
+    const blob = await convertIFCToGLB(
+      arrayBuffer,
+      (step, pct) => {
+        options.onProgress?.(step, pct);
+      },
+      (stats) => {
+        ifcStats = stats;
+      }
+    );
 
     const durationMs = Math.round(performance.now() - startTime);
     const baseName = options.filename || file.name.replace(/\.[^/.]+$/, '');
@@ -510,9 +704,9 @@ export async function convertUploadedFile(
       filename: `${baseName}.glb`,
       size: blob.size,
       durationMs,
-      vertexCount: 0,
-      triangleCount: 0,
-      meshCount: 1,
+      vertexCount: ifcStats.vertexCount,
+      triangleCount: ifcStats.triangleCount,
+      meshCount: ifcStats.meshCount,
       targetFormat: 'glb',
       isBinary: true,
     };
