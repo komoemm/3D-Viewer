@@ -48,7 +48,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
           Drop 3D Models or Three.js Scripts Here
         </h2>
         <p className="text-slate-300 text-xs sm:text-sm mb-4 text-center max-w-lg px-4">
-          Compatible with .GLB, .GLTF, .FBX, .PLY, .SPZ, .OBJ, .STL, and dynamic Three.js scripts (.TS, .JS)
+          Compatible with .GLB, .GLTF, .FBX, .PLY, .SPZ, .OBJ, .STL, .IFC (BIM), and dynamic Three.js scripts (.TS, .JS)
         </p>
         <div className="flex flex-wrap gap-2 justify-center max-w-xl px-4" role="list" aria-label="Supported file formats">
           {[
@@ -59,6 +59,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
             '.SPZ (Gaussian)',
             '.OBJ',
             '.STL',
+            '.IFC (BIM)',
             '.TS (Three.js)',
             '.JS (Three.js)',
           ].map((fmt) => (
@@ -68,6 +69,8 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
               className={`px-2.5 py-1 border rounded-lg text-xs font-mono font-medium ${
                 fmt.includes('.TS') || fmt.includes('.JS')
                   ? 'bg-amber-950/60 border-amber-500/70 text-amber-200'
+                  : fmt.includes('.IFC')
+                  ? 'bg-teal-950/60 border-teal-500/70 text-teal-200'
                   : 'bg-slate-900/90 border-slate-700 text-blue-300'
               }`}
             >
@@ -104,7 +107,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
                 role="button"
                 onClick={onOpenFileInput}
                 aria-label="Select 3D files from your computer to inspect"
-                title="Select 3D files (.glb, .gltf, .fbx, .obj, .stl, .ply, .spz)"
+                title="Select 3D files (.glb, .gltf, .fbx, .obj, .stl, .ply, .spz, .ifc)"
                 className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
               >
                 <FileCode2 className="w-4 h-4" aria-hidden="true" />
@@ -128,8 +131,8 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
                   type="button"
                   role="button"
                   onClick={onOpenConverter}
-                  aria-label="Open 3D File Converter to convert to PLY, OBJ, or STL"
-                  title="Open 3D File Converter (PLY, OBJ, STL)"
+                  aria-label="Open 3D File Converter to convert to PLY, OBJ, STL, or GLB"
+                  title="Open 3D File Converter (PLY, OBJ, STL, IFC to GLB)"
                   className="bg-amber-600/25 hover:bg-amber-600/35 border border-amber-500/50 text-amber-200 hover:text-amber-100 font-semibold text-xs px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
                 >
                   <ArrowRightLeft className="w-4 h-4 text-amber-400" aria-hidden="true" />
@@ -177,6 +180,8 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
               <span className="text-cyan-300 font-medium">OBJ</span>
               <span className="text-slate-500" aria-hidden="true">•</span>
               <span className="text-purple-300 font-medium">STL</span>
+              <span className="text-slate-500" aria-hidden="true">•</span>
+              <span className="text-teal-300 font-medium">IFC</span>
               <span className="text-slate-500" aria-hidden="true">•</span>
               <span className="text-amber-300 font-bold">.TS</span>
               <span className="text-slate-500" aria-hidden="true">•</span>

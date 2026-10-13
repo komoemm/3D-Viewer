@@ -52,6 +52,7 @@ export type SupportedFileFormat =
   | 'spz'
   | 'obj'
   | 'stl'
+  | 'ifc'
   | 'ts'
   | 'js';
 
@@ -63,8 +64,9 @@ export const SUPPORTED_FILE_EXTENSIONS: readonly SupportedFileFormat[] = [
   'spz',
   'obj',
   'stl',
+  'ifc',
   'ts',
   'js',
 ] as const;
 
-export const ACCEPTED_FILE_EXTENSIONS = '.glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ts,.js,text/javascript,application/javascript,application/typescript';
+export const ACCEPTED_FILE_EXTENSIONS = '.glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ifc,.ts,.js,text/javascript,application/javascript,application/typescript';

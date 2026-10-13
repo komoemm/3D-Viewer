@@ -24,7 +24,9 @@
     "react-dom": "^19.0.1",
     "sucrase": "^3.35.1",
     "three": "^0.185.1",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "web-ifc": "^0.0.78",
+    "web-ifc-three": "^0.0.126"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

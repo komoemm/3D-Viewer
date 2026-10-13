@@ -36,6 +36,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
   const [targetFormat, setTargetFormat] = useState<TargetFormat | 'fbx'>('glb');
   const [inputFormatOverride, setInputFormatOverride] = useState<InputFormat | 'auto'>('auto');
   const [isConverting, setIsConverting] = useState<boolean>(false);
+  const [conversionProgress, setConversionProgress] = useState<number>(0);
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
   const [lastConvertedInfo, setLastConvertedInfo] = useState<string | null>(null);
   const [conversionError, setConversionError] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
     }
 
     setIsConverting(true);
+    setConversionProgress(25);
     setLastConvertedInfo(null);
     setConversionError(null);
 
@@ -84,12 +86,14 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
+      setConversionProgress(65);
       const baseName = activeModel.name.replace(/\.[^/.]+$/, '');
       const result = await convertObject3D(activeModel.object, targetFormat, {
         filename: `${baseName}.${targetFormat}`,
         binary: true,
       });
 
+      setConversionProgress(100);
       triggerBlobDownload(result.blob, result.filename);
 
       const summary = `${result.filename} (${formatBytes(result.size)}) in ${result.durationMs}ms`;
@@ -136,7 +140,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
               onClick={onOpenConverterModal}
               title="Open full Converter options modal"
               aria-label="Open full 3D Converter modal options"
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020]"
             >
               <Settings className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
@@ -144,7 +148,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
               type="button"
               onClick={() => setIsMinimized((prev) => !prev)}
               aria-label={isMinimized ? 'Expand quick converter bar' : 'Minimize quick converter bar'}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020]"
             >
               {isMinimized ? (
                 <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
@@ -164,7 +168,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
             className="flex flex-wrap items-center gap-2 pt-1 border-t border-[#303030]"
           >
             {/* Input Format Dropdown */}
-            <div className="flex items-center gap-1.5 bg-[#181818] border border-[#383838] rounded-xl px-2.5 py-1">
+            <div className="flex items-center gap-1.5 bg-[#181818] border border-[#383838] rounded-xl px-2.5 py-1 focus-within:border-amber-500 focus-within:ring-1 focus-within:ring-amber-500">
               <label htmlFor="quick-input-format" className="text-[11px] text-slate-400 font-medium">
                 Input:
               </label>
@@ -174,7 +178,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
                   value={inputFormatOverride}
                   onChange={(e) => setInputFormatOverride(e.target.value as any)}
                   aria-label="Input 3D model format"
-                  className="bg-transparent text-blue-300 font-mono font-bold text-xs outline-none cursor-pointer pr-4 appearance-none uppercase"
+                  className="bg-transparent text-blue-300 font-mono font-bold text-xs outline-none cursor-pointer pr-4 appearance-none uppercase focus:outline-none"
                 >
                   <option value="auto" className="bg-[#242424] text-white">
                     {detectedFormat.toUpperCase()} (Auto)
@@ -185,6 +189,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
                   <option value="ply" className="bg-[#242424] text-white">PLY</option>
                   <option value="stl" className="bg-[#242424] text-white">STL</option>
                   <option value="fbx" className="bg-[#242424] text-white">FBX</option>
+                  <option value="ifc" className="bg-[#242424] text-white">IFC</option>
                 </select>
                 <ChevronDown className="w-3 h-3 text-slate-400 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
               </div>
@@ -193,7 +198,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
             <ArrowRightLeft className="w-3.5 h-3.5 text-slate-500 hidden sm:inline" aria-hidden="true" />
 
             {/* Target Format Dropdown */}
-            <div className="flex items-center gap-1.5 bg-[#181818] border border-[#383838] rounded-xl px-2.5 py-1">
+            <div className="flex items-center gap-1.5 bg-[#181818] border border-[#383838] rounded-xl px-2.5 py-1 focus-within:border-amber-500 focus-within:ring-1 focus-within:ring-amber-500">
               <label htmlFor="quick-target-format" className="text-[11px] text-slate-400 font-medium">
                 Target:
               </label>
@@ -211,7 +216,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
                     }
                   }}
                   aria-label="Target format to export"
-                  className="bg-transparent text-amber-300 font-bold text-xs outline-none cursor-pointer pr-4 appearance-none"
+                  className="bg-transparent text-amber-300 font-bold text-xs outline-none cursor-pointer pr-4 appearance-none focus:outline-none"
                 >
                   <option value="glb" className="bg-[#242424] text-white">GLB (.glb) ★</option>
                   <option value="usdz" className="bg-[#242424] text-white">USDZ (.usdz) - Apple AR</option>
@@ -236,12 +241,12 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
                   ? 'FBX export requires server-side rendering, please use GLB or OBJ.'
                   : `Convert and download ${activeModel.name} as ${targetFormat.toUpperCase()}`
               }
-              className="ml-auto px-3.5 py-1.5 rounded-xl font-bold text-white bg-[#ea7600] hover:bg-[#d96d00] disabled:bg-slate-800 disabled:text-slate-500 shadow-md shadow-[#ea7600]/25 transition flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+              className="ml-auto px-3.5 py-1.5 rounded-xl font-bold text-white bg-[#ea7600] hover:bg-[#d96d00] disabled:bg-slate-800 disabled:text-slate-500 shadow-md shadow-[#ea7600]/25 transition flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020]"
             >
               {isConverting ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                  <span>Converting...</span>
+                  <span>Converting ({conversionProgress}%)...</span>
                 </>
               ) : isFbxSelected ? (
                 <span>FBX Unsupported</span>
@@ -253,10 +258,28 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
               )}
             </button>
 
+            {/* Mini Accessible Progress Bar during conversion */}
+            {isConverting && (
+              <div
+                role="progressbar"
+                aria-valuenow={conversionProgress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Quick 3D model conversion progress"
+                aria-valuetext={`${conversionProgress}%`}
+                className="w-full bg-[#181818] rounded-full h-1.5 overflow-hidden border border-[#383838] mt-1"
+              >
+                <div
+                  className="bg-gradient-to-r from-[#ea7600] to-amber-400 h-full rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${Math.max(10, conversionProgress)}%` }}
+                />
+              </div>
+            )}
+
             {/* Live region for accessibility announcements (completion and errors) */}
             <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
               {isConverting
-                ? `Converting model to ${targetFormat.toUpperCase()}, please wait...`
+                ? `Converting model to ${targetFormat.toUpperCase()}, progress ${conversionProgress}%, please wait...`
                 : conversionError
                 ? `Notice: ${conversionError}`
                 : lastConvertedInfo
@@ -280,7 +303,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
             <button
               type="button"
               onClick={() => setConversionError(null)}
-              className="text-slate-400 hover:text-white cursor-pointer ml-2 text-xs"
+              className="text-slate-400 hover:text-white cursor-pointer ml-2 text-xs p-0.5 rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400"
               aria-label="Dismiss message"
             >
               ×
@@ -299,7 +322,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
             <button
               type="button"
               onClick={() => setLastConvertedInfo(null)}
-              className="text-slate-400 hover:text-white cursor-pointer ml-2"
+              className="text-slate-400 hover:text-white cursor-pointer ml-2 p-0.5 rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400"
               aria-label="Dismiss message"
             >
               ×

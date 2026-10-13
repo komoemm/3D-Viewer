@@ -47,6 +47,7 @@ export const SUPPORTED_3D_EXTENSIONS = [
   '.stl',
   '.ply',
   '.spz',
+  '.ifc',
 ] as const;
 
 /**
@@ -108,7 +109,7 @@ export function validate3DFormat(filename: string): FormatValidationResult {
         allowed: false,
         isExplicitlyBlocked: true,
         extension: scriptExt.slice(1).toUpperCase(),
-        reason: `Code and script files (${scriptExt}) are strictly rejected. Only 3D formats (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz) are permitted.`,
+        reason: `Code and script files (${scriptExt}) are strictly rejected. Only 3D formats (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc) are permitted.`,
       };
     }
   }
@@ -131,7 +132,7 @@ export function validate3DFormat(filename: string): FormatValidationResult {
     allowed: false,
     isExplicitlyBlocked: false,
     extension: detectedExt,
-    reason: `Format ${detectedExt} is not supported. Supported 3D formats: .glb, .gltf, .obj, .fbx, .stl, .ply, .spz.`,
+    reason: `Format ${detectedExt} is not supported. Supported 3D formats: .glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc.`,
   };
 }
 
@@ -474,6 +475,8 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
         return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
       case 'SPZ':
         return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+      case 'IFC':
+        return 'bg-orange-500/20 text-orange-300 border-orange-500/40';
       default:
         return 'bg-slate-700/40 text-slate-300 border-slate-600/40';
     }
@@ -493,7 +496,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
         title: 'Missing File ID',
         summary: 'Please enter a valid Google Drive file share link or file ID.',
         steps: [
-          'In Google Drive, right-click your 3D model (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz).',
+          'In Google Drive, right-click your 3D model (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc).',
           'Select Share → Copy link ("Anyone with the link can view").',
           'Paste the link into the input field above.',
         ],
@@ -595,7 +598,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           title: 'Blocked Script / Code File',
           summary: `The file "${determinedName}" was rejected because code and script files (.ts, .js, .json, .txt) cannot be imported.`,
           steps: [
-            'Only 3D model formats (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz) are permitted.',
+            'Only 3D model formats (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc) are permitted.',
             'If you intended to load a 3D model, make sure your link points directly to a 3D asset file.',
           ],
         });
@@ -611,7 +614,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           determinedName = `${determinedName}.glb`;
         } else {
           // Check if user provided an extension in the input link
-          const matchExt = linkInput.match(/\.(glb|gltf|obj|fbx|stl|ply|spz)(\?.*)?$/i);
+          const matchExt = linkInput.match(/\.(glb|gltf|obj|fbx|stl|ply|spz|ifc)(\?.*)?$/i);
           if (matchExt) {
             determinedName = `model-${fileId.slice(0, 8)}.${matchExt[1].toLowerCase()}`;
           } else {
@@ -619,8 +622,8 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
               title: 'Unsupported File Format',
               summary: `The file "${determinedName}" is not recognized as a supported 3D format.`,
               steps: [
-                'Ensure the file has one of the supported 3D extensions: .glb, .gltf, .obj, .fbx, .stl, .ply, .spz.',
-                'Renaming the file in Google Drive to include its correct extension (.glb, .obj, etc.) resolves this.',
+                'Ensure the file has one of the supported 3D extensions: .glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc.',
+                'Renaming the file in Google Drive to include its correct extension (.glb, .ifc, .obj, etc.) resolves this.',
               ],
             });
             throw new Error(`Unsupported 3D file format for "${determinedName}".`);
@@ -679,7 +682,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           summary: err.message || 'An unexpected error occurred during direct download.',
           steps: [
             'Verify that the Google Drive share link is publicly accessible.',
-            'Confirm the file is a supported 3D format (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz).',
+            'Confirm the file is a supported 3D format (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc).',
           ],
         });
       }
@@ -844,7 +847,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
       const rawFiles: DriveFile[] = data.files || [];
 
       // STRICT 3D FORMAT WHITELIST ENFORCEMENT:
-      // Filter ONLY [.glb, .gltf, .obj, .fbx, .stl, .ply, .spz]
+      // Filter ONLY [.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc]
       // Reject and count all code, script (.ts, .js, .json, .txt), and non-3D files
       const valid3DFiles: DriveFile[] = [];
       let rejectedCount = 0;
@@ -869,7 +872,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
       } else {
         if (rawFiles.length > 0) {
           setInfoMessage(
-            `Found ${rawFiles.length} file(s) in this folder, but none are supported 3D formats (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz). ${rejectedCount} non-3D / script file(s) were filtered out.`
+            `Found ${rawFiles.length} file(s) in this folder, but none are supported 3D formats (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc). ${rejectedCount} non-3D / script file(s) were filtered out.`
           );
         } else {
           setInfoMessage('This Google Drive folder is empty or contains no accessible files.');
@@ -1383,7 +1386,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                     <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
                     <span>
                       Google Drive API v3 requires an API key to query folders. Only 3D model formats (
-                      <strong className="text-white">.glb, .gltf, .obj, .fbx, .stl, .ply, .spz</strong>
+                      <strong className="text-white">.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc</strong>
                       ) are shown; code and script files (.ts, .js, .json, .txt) are strictly filtered out.
                     </span>
                   </div>

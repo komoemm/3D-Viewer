@@ -1170,8 +1170,8 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         <canvas
           ref={canvasRef}
           tabIndex={0}
-          role="img"
-          aria-label="Interactive 3D model viewport: use mouse, touch, or keyboard to rotate and inspect"
+          role="region"
+          aria-label="3D Model Canvas"
           className="w-full h-full block cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
         >
           <div className="sr-only">

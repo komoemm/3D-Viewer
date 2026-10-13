@@ -93,6 +93,141 @@ export async function getSTLLoader(): Promise<STLLoader> {
   return stlLoaderPromise;
 }
 
+let ifcLoaderInstance: any = null;
+let ifcLoaderPromise: Promise<any> | null = null;
+
+export async function getIFCLoader(): Promise<any> {
+  if (ifcLoaderInstance) return ifcLoaderInstance;
+  if (!ifcLoaderPromise) {
+    ifcLoaderPromise = (async () => {
+      const { IFCLoader } = await import('web-ifc-three');
+      const loader = new IFCLoader();
+
+      // Configure IFCLoader wasm path properly.
+      // web-ifc appends 'web-ifc.wasm' to the provided directory path.
+      // Vite serves public/web-ifc.wasm at '/', so '/' resolves to '/web-ifc.wasm'.
+      // Fallback to unpkg CDN if needed.
+      try {
+        await loader.ifcManager.setWasmPath('/');
+      } catch (err) {
+        console.warn('Could not set local wasm path, falling back to CDN:', err);
+        await loader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.78/');
+      }
+
+      ifcLoaderInstance = loader;
+      return loader;
+    })();
+  }
+  return ifcLoaderPromise;
+}
+
+/**
+ * Loads an Industry Foundation Classes (.ifc) BIM model into a centered THREE.Group.
+ * Dynamically loads IFCLoader on demand to protect bundle size and Lighthouse scores.
+ * Ensures coordination coordinate centering (bounding box center) to fix real-world georeferencing
+ * offsets, and sets proper BIM materials and lighting flags.
+ */
+export async function loadIFCModel(
+  file: File | ArrayBuffer,
+  onProgress?: (percent: number) => void
+): Promise<THREE.Group> {
+  const loader = await getIFCLoader();
+
+  if (onProgress) onProgress(20);
+
+  let buffer: ArrayBuffer;
+  let filename = 'IFC_Model.ifc';
+  if (file instanceof File) {
+    filename = file.name;
+    buffer = await file.arrayBuffer();
+  } else {
+    buffer = file;
+  }
+
+  if (onProgress) onProgress(45);
+
+  let ifcModel: any;
+  try {
+    ifcModel = await loader.parse(buffer);
+  } catch (err: any) {
+    console.warn('IFC parsing failed with local wasm path, attempting CDN fallback...', err);
+    try {
+      await loader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.78/');
+      ifcModel = await loader.parse(buffer);
+    } catch (cdnErr: any) {
+      throw new Error(`Failed to parse IFC model: ${cdnErr?.message || cdnErr || err?.message}`);
+    }
+  }
+
+  if (onProgress) onProgress(80);
+
+  // Wrap in THREE.Group container for coordination coordinate centering
+  const group = new THREE.Group();
+  group.name = filename;
+  group.add(ifcModel);
+
+  // Coordination coordinate centering:
+  // BIM / IFC models frequently contain massive georeferenced survey coordinate offsets
+  // (e.g. hundreds of thousands of meters from origin) which cause jitter and camera clipping.
+  // Center the bounding box to (0, 0, 0).
+  const bbox = new THREE.Box3().setFromObject(ifcModel);
+  if (!bbox.isEmpty()) {
+    const center = new THREE.Vector3();
+    bbox.getCenter(center);
+    ifcModel.position.x -= center.x;
+    ifcModel.position.y -= center.y;
+    ifcModel.position.z -= center.z;
+    ifcModel.updateMatrixWorld(true);
+  }
+
+  // Proper material and lighting assignment for BIM elements
+  group.traverse((child: any) => {
+    if (child.isMesh || child instanceof THREE.Mesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      child.frustumCulled = true;
+
+      const geom = child.geometry;
+      if (geom) {
+        if (!geom.attributes.normal) {
+          geom.computeVertexNormals();
+        }
+        if (!geom.boundingSphere) {
+          geom.computeBoundingSphere();
+        }
+        if (!geom.boundingBox) {
+          geom.computeBoundingBox();
+        }
+      }
+
+      if (child.material) {
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((mat: THREE.Material) => {
+          // DoubleSide is essential for BIM geometry (walls, slabs, ceilings, doors)
+          mat.side = THREE.DoubleSide;
+
+          if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhysicalMaterial) {
+            mat.roughness = THREE.MathUtils.clamp(mat.roughness ?? 0.45, 0.2, 0.85);
+            mat.metalness = THREE.MathUtils.clamp(mat.metalness ?? 0.1, 0, 0.4);
+          }
+
+          if (typeof mat.opacity === 'number' && mat.opacity < 0.99) {
+            mat.transparent = true;
+            mat.depthWrite = false;
+          }
+          mat.needsUpdate = true;
+        });
+      }
+    }
+  });
+
+  group.updateMatrixWorld(true);
+
+  if (onProgress) onProgress(100);
+
+  return group;
+}
+
 /**
  * Concurrency-controlled queue for asynchronous 3D model parsing and loading.
  * Limits concurrent model decoding and geometry parsing to a max of 2-3 at a time
@@ -595,6 +730,10 @@ export async function loadModelFile(
           });
           object = new THREE.Mesh(geom, mat);
         }
+      } else if (ext === 'ifc') {
+        if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
+        object = await loadIFCModel(file);
+        if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
       } else if (ext === 'ts' || ext === 'js') {
         if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
         const code = await file.text();
@@ -603,7 +742,7 @@ export async function loadModelFile(
         if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
       } else {
         throw new Error(
-          `Unsupported file format: .${ext}. Supported formats are .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ts, .js`
+          `Unsupported file format: .${ext}. Supported formats are .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .ts, .js`
         );
       }
 

@@ -193,7 +193,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         ref={fileInputRef}
         type="file"
         aria-label="Upload 3D model files or Three.js scripts"
-        accept=".glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ts,.js,text/javascript,application/typescript"
+        accept=".glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ifc,.ts,.js,text/javascript,application/typescript"
         multiple
         onChange={handleFileChange}
         className="hidden"
@@ -266,7 +266,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                         fileInputRef.current?.click();
                       }}
                       aria-label="Open 3D files from local computer"
-                      title="Open 3D files (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ts, .js)"
+                      title="Open 3D files (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc, .ts, .js)"
                       className="px-2.5 py-1 rounded-lg bg-[#ea7600] text-white text-[11px] font-semibold hover:bg-[#d96d00] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                     >
                       Open Files
@@ -901,8 +901,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           type="button"
           role="button"
           onClick={() => fileInputRef.current?.click()}
-          aria-label="Open 3D files from local computer (.glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ts, .js)"
-          title="Open .glb, .gltf, .fbx, .ply, .spz, .obj, .stl files"
+          aria-label="Open 3D files from local computer (.glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .ts, .js)"
+          title="Open .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc files"
           className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#ea7600] hover:bg-[#d96d00] shadow-md shadow-[#ea7600]/25 flex items-center gap-1.5 transition active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
         >
           <Upload className="w-3.5 h-3.5" aria-hidden="true" />

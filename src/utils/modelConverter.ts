@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { LoadedModel } from '../types';
-import { loadModelFile, disposeSceneHierarchy, disposeLoadedModel } from './modelLoaders';
+import { loadModelFile, disposeSceneHierarchy, disposeLoadedModel, loadIFCModel } from './modelLoaders';
 
 export type TargetFormat = 'glb' | 'usdz' | 'ply' | 'obj' | 'stl';
-export type InputFormat = 'glb' | 'gltf' | 'obj' | 'ply' | 'stl' | 'fbx' | 'spz' | 'ts' | 'js' | 'unknown';
+export type InputFormat = 'glb' | 'gltf' | 'obj' | 'ply' | 'stl' | 'fbx' | 'spz' | 'ifc' | 'ts' | 'js' | 'unknown';
 
 export interface ConversionOptions {
   binary?: boolean;
@@ -12,6 +12,7 @@ export interface ConversionOptions {
   includeNormals?: boolean;
   includeColors?: boolean;
   includeUVs?: boolean;
+  onProgress?: (step: string, percent: number) => void;
 }
 
 export interface ConversionResult {
@@ -132,7 +133,7 @@ export function detectFormatFromFilename(name: string): InputFormat {
   if (!name) return 'unknown';
   const clean = name.toLowerCase().split('?')[0].split('#')[0];
   const ext = clean.split('.').pop() || '';
-  if (['glb', 'gltf', 'obj', 'ply', 'stl', 'fbx', 'spz', 'ts', 'js'].includes(ext)) {
+  if (['glb', 'gltf', 'obj', 'ply', 'stl', 'fbx', 'spz', 'ifc', 'ts', 'js'].includes(ext)) {
     return ext as InputFormat;
   }
   return 'unknown';
@@ -387,6 +388,98 @@ export async function convertObject3D(
   };
 }
 
+export type IFCConversionStep = 'Reading IFC' | 'Building Geometry' | 'Exporting GLB';
+
+/**
+ * Converts raw IFC (Industry Foundation Classes) binary data into a binary GLB Blob.
+ * Dynamically loads IFCLoader (via loadIFCModel) and GLTFExporter only when invoked,
+ * protecting bundle size and Google Lighthouse metrics.
+ *
+ * 1. Parses the IFC model into a Three.js scene/group with coordinate centering
+ * 2. Cleans up any unneeded helper objects, lights, cameras, or debug nodes
+ * 3. Runs GLTFExporter.parse with binary: true
+ * 4. Disposes of temporary scene memory and returns the resulting ArrayBuffer/Blob as a downloadable .glb file.
+ */
+export async function convertIFCToGLB(
+  ifcData: ArrayBuffer,
+  onStepProgress?: (step: IFCConversionStep, percent: number) => void
+): Promise<Blob> {
+  // Step 1: Reading IFC
+  onStepProgress?.('Reading IFC', 20);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  // Step 2: Building Geometry
+  onStepProgress?.('Building Geometry', 40);
+  const ifcScene = await loadIFCModel(ifcData, (pct) => {
+    onStepProgress?.('Building Geometry', 20 + Math.round(pct * 0.45));
+  });
+
+  try {
+    // Clean up any unneeded helper objects, cameras, lights, or debug gizmos
+    const helpersToRemove: THREE.Object3D[] = [];
+    ifcScene.traverse((child) => {
+      if (
+        child instanceof THREE.Camera ||
+        child instanceof THREE.Light ||
+        child.type.includes('Helper') ||
+        child.type.includes('Gizmo') ||
+        child.name.toLowerCase().includes('helper') ||
+        child.name.toLowerCase().includes('grid')
+      ) {
+        helpersToRemove.push(child);
+      }
+    });
+
+    for (const helper of helpersToRemove) {
+      if (helper.parent) {
+        helper.parent.remove(helper);
+      }
+    }
+
+    ifcScene.updateMatrixWorld(true);
+
+    // Step 3: Exporting GLB
+    onStepProgress?.('Exporting GLB', 75);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // Dynamically load GLTFExporter and export to binary GLB
+    const exporter = await getGLTFExporter();
+
+    const glbBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+      try {
+        exporter.parse(
+          ifcScene,
+          (result) => {
+            if (result instanceof ArrayBuffer) {
+              resolve(result);
+            } else {
+              reject(new Error('GLTFExporter did not return an ArrayBuffer for binary GLB export'));
+            }
+          },
+          (error) => {
+            reject(error instanceof Error ? error : new Error(String(error)));
+          },
+          {
+            binary: true,
+            embedImages: true,
+            onlyVisible: true,
+          }
+        );
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    onStepProgress?.('Exporting GLB', 100);
+
+    // 4. Return resulting ArrayBuffer as a downloadable .glb Blob
+    return new Blob([glbBuffer], { type: 'model/gltf-binary' });
+  } finally {
+    // Thoroughly dispose temporary Three.js geometry, materials, and textures
+    disposeSceneHierarchy(ifcScene);
+  }
+}
+
 /**
  * Converts a raw 3D File directly on the client side by loading it into an isolated
  * Three.js Object3D, exporting to target format, and thoroughly disposing of the
@@ -397,6 +490,34 @@ export async function convertUploadedFile(
   targetFormat: TargetFormat,
   options: ConversionOptions = {}
 ): Promise<ConversionResult> {
+  const ext = file.name.split('.').pop()?.toLowerCase();
+
+  // Optimized direct path for IFC to GLB conversion
+  if (ext === 'ifc' && targetFormat === 'glb') {
+    const startTime = performance.now();
+    options.onProgress?.('Reading IFC', 15);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const arrayBuffer = await file.arrayBuffer();
+
+    const blob = await convertIFCToGLB(arrayBuffer, (step, pct) => {
+      options.onProgress?.(step, pct);
+    });
+
+    const durationMs = Math.round(performance.now() - startTime);
+    const baseName = options.filename || file.name.replace(/\.[^/.]+$/, '');
+    return {
+      blob,
+      filename: `${baseName}.glb`,
+      size: blob.size,
+      durationMs,
+      vertexCount: 0,
+      triangleCount: 0,
+      meshCount: 1,
+      targetFormat: 'glb',
+      isBinary: true,
+    };
+  }
+
   let loadedModel: LoadedModel | null = null;
 
   try {

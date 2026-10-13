@@ -68,6 +68,8 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
   // Conversion process state
   const [isConverting, setIsConverting] = useState<boolean>(false);
   const [conversionStatusText, setConversionStatusText] = useState<string>('');
+  const [conversionProgress, setConversionProgress] = useState<number>(0);
+  const [conversionStep, setConversionStep] = useState<string>('');
   const [conversionResult, setConversionResult] = useState<ConversionResult | null>(null);
   const [conversionError, setConversionError] = useState<string | null>(null);
 
@@ -215,6 +217,10 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
       setSourceMode('upload');
       setConversionResult(null);
       setConversionError(null);
+      if (file.name.toLowerCase().endsWith('.ifc')) {
+        setInputFormatOverride('ifc');
+        setTargetFormat('glb');
+      }
     }
   };
 
@@ -224,6 +230,10 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
       setUploadedFile(file);
       setConversionResult(null);
       setConversionError(null);
+      if (file.name.toLowerCase().endsWith('.ifc')) {
+        setInputFormatOverride('ifc');
+        setTargetFormat('glb');
+      }
       e.target.value = '';
     }
   };
@@ -240,7 +250,21 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
     setIsConverting(true);
     setConversionError(null);
     setConversionResult(null);
-    setConversionStatusText(`Preparing ${targetFormat.toUpperCase()} export pipeline...`);
+
+    const isIFC =
+      detectedInputFormat === 'ifc' ||
+      inputFormatOverride === 'ifc' ||
+      (uploadedFile && uploadedFile.name.toLowerCase().endsWith('.ifc'));
+
+    if (isIFC) {
+      setConversionStep('Reading IFC');
+      setConversionProgress(20);
+      setConversionStatusText('Reading IFC BIM data...');
+    } else {
+      setConversionStep('Preparing');
+      setConversionProgress(25);
+      setConversionStatusText(`Preparing ${targetFormat.toUpperCase()} export pipeline...`);
+    }
 
     // Defer the heavy conversion parsing to next event loop tick using await new Promise(resolve => setTimeout(resolve, 50))
     // so the conversion spinner immediately renders on the UI without blocking main thread responsiveness (INP)
@@ -254,6 +278,8 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
           throw new Error('No 3D model selected from the scene.');
         }
 
+        setConversionStep('Building Geometry');
+        setConversionProgress(50);
         setConversionStatusText(`Converting "${currentSceneModel.name}" to ${targetFormat.toUpperCase()}...`);
 
         result = await convertObject3D(currentSceneModel.object, targetFormat, {
@@ -267,16 +293,21 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
           throw new Error('Please select or drop a 3D model file to convert.');
         }
 
-        setConversionStatusText(`Parsing "${uploadedFile.name}" and generating ${targetFormat.toUpperCase()} buffer...`);
-
         result = await convertUploadedFile(uploadedFile, targetFormat, {
           binary: isBinary,
           filename: effectiveFilename,
           includeNormals,
           includeColors,
+          onProgress: (step, percent) => {
+            setConversionStep(step);
+            setConversionProgress(percent);
+            setConversionStatusText(`${step}...`);
+          },
         });
       }
 
+      setConversionStep('Exporting GLB');
+      setConversionProgress(100);
       setConversionStatusText(`Conversion complete! Initiating download...`);
       setConversionResult(result);
 
@@ -493,7 +524,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".glb,.gltf,.obj,.ply,.stl,.fbx,.spz"
+                accept=".glb,.gltf,.obj,.ply,.stl,.fbx,.spz,.ifc"
                 onChange={handleFileInputChange}
                 className="hidden"
                 aria-label="Upload 3D model file for conversion"
@@ -518,7 +549,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
                   </div>
                   <div>
                     <div className="text-xs font-semibold text-white">Click or drag a 3D model file here</div>
-                    <div className="text-[11px] text-slate-400">Supports .GLB, .GLTF, .OBJ, .PLY, .STL, .FBX, .SPZ</div>
+                    <div className="text-[11px] text-slate-400">Supports .GLB, .GLTF, .OBJ, .PLY, .STL, .IFC, .FBX, .SPZ</div>
                   </div>
                 </>
               )}
@@ -550,6 +581,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
                     <option value="obj">OBJ (Wavefront)</option>
                     <option value="ply">PLY (Polygon)</option>
                     <option value="stl">STL (3D Print)</option>
+                    <option value="ifc">IFC (BIM Architectural)</option>
                     <option value="fbx">FBX (Autodesk)</option>
                   </select>
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
@@ -580,7 +612,11 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
                   aria-label="Target format for conversion"
                   className="w-full bg-[#242424] border border-[#404040] focus:border-amber-500 rounded-lg px-3 py-1.5 text-xs text-white appearance-none outline-none cursor-pointer focus:ring-1 focus:ring-amber-500 font-semibold"
                 >
-                  <option value="glb">GLB (.glb) — Binary glTF 2.0 (Recommended)</option>
+                  <option value="glb">
+                    {detectedInputFormat === 'ifc' || inputFormatOverride === 'ifc'
+                      ? 'IFC → GLB — Binary glTF 2.0 (Recommended BIM Target)'
+                      : 'GLB (.glb) — Binary glTF 2.0 (IFC → GLB / Recommended)'}
+                  </option>
                   <option value="usdz">USDZ (.usdz) — Universal Scene Description (Apple AR / iOS)</option>
                   <option value="ply">PLY (.ply) — Polygon File Format</option>
                   <option value="obj">OBJ (.obj) — Wavefront 3D Object</option>
@@ -591,6 +627,139 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Quick Format Presets Row */}
+          <div className="flex flex-wrap items-center gap-1.5 px-1 text-xs" role="group" aria-label="Quick format conversion presets">
+            <span className="text-[11px] text-slate-400 font-medium">Quick Presets:</span>
+            <button
+              type="button"
+              onClick={() => {
+                setInputFormatOverride('ifc');
+                setTargetFormat('glb');
+              }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020] ${
+                targetFormat === 'glb' && (detectedInputFormat === 'ifc' || inputFormatOverride === 'ifc')
+                  ? 'bg-amber-600/30 border-amber-500 text-amber-200 shadow-sm'
+                  : 'bg-[#222222] border-[#383838] text-slate-300 hover:text-white hover:border-slate-500'
+              }`}
+            >
+              IFC → GLB
+            </button>
+            <button
+              type="button"
+              onClick={() => setTargetFormat('glb')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020] ${
+                targetFormat === 'glb' && detectedInputFormat !== 'ifc' && inputFormatOverride !== 'ifc'
+                  ? 'bg-amber-600/30 border-amber-500 text-amber-200 shadow-sm'
+                  : 'bg-[#222222] border-[#383838] text-slate-300 hover:text-white hover:border-slate-500'
+              }`}
+            >
+              GLB
+            </button>
+            <button
+              type="button"
+              onClick={() => setTargetFormat('ply')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020] ${
+                targetFormat === 'ply'
+                  ? 'bg-amber-600/30 border-amber-500 text-amber-200 shadow-sm'
+                  : 'bg-[#222222] border-[#383838] text-slate-300 hover:text-white hover:border-slate-500'
+              }`}
+            >
+              PLY
+            </button>
+            <button
+              type="button"
+              onClick={() => setTargetFormat('obj')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020] ${
+                targetFormat === 'obj'
+                  ? 'bg-amber-600/30 border-amber-500 text-amber-200 shadow-sm'
+                  : 'bg-[#222222] border-[#383838] text-slate-300 hover:text-white hover:border-slate-500'
+              }`}
+            >
+              OBJ
+            </button>
+            <button
+              type="button"
+              onClick={() => setTargetFormat('stl')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020] ${
+                targetFormat === 'stl'
+                  ? 'bg-amber-600/30 border-amber-500 text-amber-200 shadow-sm'
+                  : 'bg-[#222222] border-[#383838] text-slate-300 hover:text-white hover:border-slate-500'
+              }`}
+            >
+              STL
+            </button>
+          </div>
+
+          {/* Active Conversion Progress Feedback with ARIA Progressbar */}
+          {isConverting && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="p-3.5 bg-slate-900/90 border border-amber-500/50 rounded-xl space-y-2.5 animate-in fade-in duration-150"
+            >
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 font-semibold text-white">
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" aria-hidden="true" />
+                  <span>{conversionStatusText || 'Converting 3D model...'}</span>
+                </div>
+                <span className="font-mono text-amber-300 font-bold">{conversionProgress}%</span>
+              </div>
+
+              {/* Step-by-step progress indicators during IFC parsing and GLTF exporting */}
+              <div
+                className="grid grid-cols-3 gap-1.5 text-[10px] font-mono text-center"
+                aria-label="IFC to GLB Conversion steps"
+              >
+                <div
+                  className={`py-1.5 px-1 rounded-lg border transition-all ${
+                    conversionProgress >= 20 || conversionStep === 'Reading IFC'
+                      ? 'bg-amber-600/25 border-amber-500/70 text-amber-200 font-bold'
+                      : 'bg-[#181818] border-[#333333] text-slate-500'
+                  }`}
+                >
+                  <span className="block font-sans text-[9px] uppercase tracking-wider text-slate-400">Step 1</span>
+                  <span>Reading IFC</span>
+                </div>
+                <div
+                  className={`py-1.5 px-1 rounded-lg border transition-all ${
+                    conversionProgress >= 40 || conversionStep === 'Building Geometry'
+                      ? 'bg-amber-600/25 border-amber-500/70 text-amber-200 font-bold'
+                      : 'bg-[#181818] border-[#333333] text-slate-500'
+                  }`}
+                >
+                  <span className="block font-sans text-[9px] uppercase tracking-wider text-slate-400">Step 2</span>
+                  <span>Building Geometry</span>
+                </div>
+                <div
+                  className={`py-1.5 px-1 rounded-lg border transition-all ${
+                    conversionProgress >= 75 || conversionStep === 'Exporting GLB' || conversionStep === 'Complete'
+                      ? 'bg-amber-600/25 border-amber-500/70 text-amber-200 font-bold'
+                      : 'bg-[#181818] border-[#333333] text-slate-500'
+                  }`}
+                >
+                  <span className="block font-sans text-[9px] uppercase tracking-wider text-slate-400">Step 3</span>
+                  <span>Exporting GLB</span>
+                </div>
+              </div>
+
+              {/* ARIA compliant Progress Bar */}
+              <div
+                role="progressbar"
+                aria-valuenow={conversionProgress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="3D model conversion progress"
+                aria-valuetext={`${conversionProgress}% - ${conversionStatusText}`}
+                className="w-full bg-[#181818] rounded-full h-2 overflow-hidden border border-[#383838]"
+              >
+                <div
+                  className="bg-gradient-to-r from-[#ea7600] to-amber-400 h-full rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${Math.max(6, conversionProgress)}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* Graceful FBX notice banner */}
           {targetFormat === 'fbx' && (
@@ -689,7 +858,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsBinary(true)}
-                        className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                        className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020] ${
                           isBinary
                             ? 'bg-amber-600/25 border-amber-500/70 text-amber-200'
                             : 'bg-[#222222] border-[#383838] text-slate-400 hover:text-white'
@@ -700,7 +869,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsBinary(false)}
-                        className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                        className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-medium border transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020] ${
                           !isBinary
                             ? 'bg-amber-600/25 border-amber-500/70 text-amber-200'
                             : 'bg-[#222222] border-[#383838] text-slate-400 hover:text-white'
@@ -783,7 +952,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
                 <button
                   type="button"
                   onClick={() => triggerBlobDownload(conversionResult.blob, conversionResult.filename)}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020]"
                 >
                   <Download className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Download Again</span>
@@ -793,7 +962,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
                   <button
                     type="button"
                     onClick={handleLoadConvertedToScene}
-                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020]"
                   >
                     <Eye className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>View in Viewport</span>
@@ -836,7 +1005,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={isConverting}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020]"
           >
             Cancel
           </button>
