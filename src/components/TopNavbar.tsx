@@ -656,11 +656,11 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                 <span className="text-[10px] font-semibold text-slate-300 uppercase">Background Color</span>
                 <div className="flex items-center gap-2" role="group" aria-label="Background Color Swatches">
                   {[
+                    { hex: '#f5f5f3', label: 'Light Studio (#f5f5f3)' },
+                    { hex: '#ffffff', label: 'Pure White (#ffffff)' },
+                    { hex: '#e5e7eb', label: 'Warm Light Gray (#e5e7eb)' },
                     { hex: '#303030', label: 'Blender Neutral (#303030)' },
-                    { hex: '#3e3e3e', label: 'Studio Gray (#3e3e3e)' },
                     { hex: '#242424', label: 'Deep Charcoal (#242424)' },
-                    { hex: '#1e1e1e', label: 'Dark Gray (#1e1e1e)' },
-                    { hex: '#090d16', label: 'Navy Slate (#090d16)' },
                     { hex: '#000000', label: 'Pure Black (#000000)' },
                   ].map(({ hex, label }) => (
                     <button

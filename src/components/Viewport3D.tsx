@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
   LoadedModel,
   TransformValues,
@@ -120,6 +121,10 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       hemiLight: THREE.HemisphereLight;
       dirLight: THREE.DirectionalLight;
       dirLight2: THREE.DirectionalLight;
+      dirLight3: THREE.DirectionalLight;
+      dirLight4: THREE.DirectionalLight;
+      shadowPlane: THREE.Mesh;
+      environmentTexture: THREE.Texture | null;
       mixer: THREE.AnimationMixer | null;
       currentAction: THREE.AnimationAction | null;
       clock: THREE.Clock;
@@ -220,9 +225,24 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.0;
+      renderer.toneMappingExposure = 1.25;
 
-      // 4. OrbitControls with change listener for on-demand rendering
+      // 4. Studio Environment Lighting (RoomEnvironment) for rich PBR reflections and indirect fill
+      let environmentTexture: THREE.Texture | null = null;
+      try {
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        pmremGenerator.compileEquirectangularShader();
+        const roomEnv = new RoomEnvironment();
+        environmentTexture = pmremGenerator.fromScene(roomEnv, 0.04).texture;
+        scene.environment = environmentTexture;
+        (scene as any).environmentIntensity = 1.1;
+        pmremGenerator.dispose();
+        roomEnv.dispose();
+      } catch (envErr) {
+        console.warn('RoomEnvironment initialization fallback:', envErr);
+      }
+
+      // 5. OrbitControls with change listener for on-demand rendering
       const controls = new OrbitControls(activeCamera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.06;
@@ -233,7 +253,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         requestRender();
       });
 
-      // 5. TransformControls
+      // 6. TransformControls
       const transformControls = new TransformControls(activeCamera, renderer.domElement);
       transformControls.size = 0.85;
       const gizmoHelper = typeof (transformControls as any).getHelper === 'function' 
@@ -287,33 +307,57 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         requestRender();
       });
 
-      // 6. Optimized Lights (Blender Studio 3-Point Setup with 1024x1024 shadow map)
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      // 7. Balanced High-Clarity Studio Daylight Rig (Key Light + 3 Fill/Rim Lights + Ground Bounce)
+      // Baseline high-clarity ambient fill across all surfaces
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
       scene.add(ambientLight);
 
-      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x303030, 0.5);
-      hemiLight.position.set(0, 20, 0);
+      // Sky / Ground Hemisphere Light: soft ground bounce so undersides and recesses are never pitch dark
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0xe2e8f0, 0.95);
+      hemiLight.position.set(0, 25, 0);
       scene.add(hemiLight);
 
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-      dirLight.position.set(5, 12, 7);
+      // Key Light: Warm bright sunlight / studio key light casting natural soft directional shadows
+      const dirLight = new THREE.DirectionalLight(0xfffbf2, 1.6);
+      dirLight.position.set(8, 16, 9);
       dirLight.castShadow = true;
-      // Optimized shadow map resolution to reduce GPU memory footprint
-      dirLight.shadow.mapSize.width = 1024;
-      dirLight.shadow.mapSize.height = 1024;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
       dirLight.shadow.camera.near = 0.5;
-      dirLight.shadow.camera.far = 35;
-      dirLight.shadow.camera.left = -14;
-      dirLight.shadow.camera.right = 14;
-      dirLight.shadow.camera.top = 14;
-      dirLight.shadow.camera.bottom = -14;
-      dirLight.shadow.bias = -0.0005;
+      dirLight.shadow.camera.far = 45;
+      dirLight.shadow.camera.left = -18;
+      dirLight.shadow.camera.right = 18;
+      dirLight.shadow.camera.top = 18;
+      dirLight.shadow.camera.bottom = -18;
+      dirLight.shadow.bias = -0.0001;
       dirLight.shadow.normalBias = 0.02;
+      dirLight.shadow.radius = 2.5;
       scene.add(dirLight);
 
-      const dirLight2 = new THREE.DirectionalLight(0xe2e8f0, 0.4);
-      dirLight2.position.set(-5, 6, -5);
+      // Fill Light 1 (front-left): Soft daylight fill to illuminate left faces and recesses
+      const dirLight2 = new THREE.DirectionalLight(0xf1f5f9, 0.9);
+      dirLight2.position.set(-8, 10, 8);
       scene.add(dirLight2);
+
+      // Fill Light 2 (back-right rim): Warm rim fill for edge definition
+      const dirLight3 = new THREE.DirectionalLight(0xffedd5, 0.7);
+      dirLight3.position.set(6, 10, -8);
+      scene.add(dirLight3);
+
+      // Fill Light 3 (back-left rim): Cool rim fill ensuring 360-degree illumination
+      const dirLight4 = new THREE.DirectionalLight(0xe2e8f0, 0.6);
+      dirLight4.position.set(-7, 9, -7);
+      scene.add(dirLight4);
+
+      // 8. Soft Ground Contact Shadow Receiver (ShadowMaterial)
+      // Transparent floor that receives soft natural directional shadows without darkening the background
+      const shadowPlaneGeo = new THREE.PlaneGeometry(80, 80);
+      const shadowPlaneMat = new THREE.ShadowMaterial({ opacity: 0.16 });
+      const shadowPlane = new THREE.Mesh(shadowPlaneGeo, shadowPlaneMat);
+      shadowPlane.rotation.x = -Math.PI / 2;
+      shadowPlane.position.y = -0.002;
+      shadowPlane.receiveShadow = true;
+      scene.add(shadowPlane);
 
       // 7. Floor Grid (Blender Style)
       const gridHelper = new THREE.GridHelper(30, 30, 0x555555, 0x3d3d3d);
@@ -414,6 +458,10 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         hemiLight,
         dirLight,
         dirLight2,
+        dirLight3,
+        dirLight4,
+        shadowPlane,
+        environmentTexture,
         mixer: null,
         currentAction: null,
         clock,
@@ -628,8 +676,15 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
 
         // Comprehensive deep scene and renderer cleanup
         if (threeRef.current) {
-          const { transformControls, renderer, scene } = threeRef.current;
+          const { transformControls, renderer, scene, environmentTexture, shadowPlane } = threeRef.current;
           transformControls.dispose();
+          if (environmentTexture) {
+            environmentTexture.dispose();
+          }
+          if (shadowPlane) {
+            shadowPlane.geometry.dispose();
+            (shadowPlane.material as THREE.Material).dispose();
+          }
           disposeSceneHierarchy(scene, renderer);
           renderer.dispose();
         }
@@ -740,6 +795,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
             child !== threeRef.current?.groundAxesHelper &&
             child !== threeRef.current?.axesHelper &&
             child !== threeRef.current?.bboxHelper &&
+            child !== threeRef.current?.shadowPlane &&
             !modelObjects.has(child)
           ) {
             if (!(child as any).isTransformControls) {
@@ -812,67 +868,147 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
     // Update Lighting Presets & Intensity
     useEffect(() => {
       if (!threeRef.current) return;
-      const { ambientLight, dirLight, dirLight2, hemiLight } = threeRef.current;
-
-      dirLight.intensity = lightIntensity;
+      const { ambientLight, dirLight, dirLight2, dirLight3, dirLight4, hemiLight, scene } = threeRef.current;
 
       switch (lightingPreset) {
         case 'studio':
           ambientLight.color.setHex(0xffffff);
-          ambientLight.intensity = 0.65;
-          dirLight.color.setHex(0xffffff);
-          dirLight.intensity = lightIntensity;
-          dirLight2.color.setHex(0xe2e8f0);
-          dirLight2.intensity = 0.4 * (lightIntensity / 1.2);
+          ambientLight.intensity = 0.95;
+          dirLight.color.setHex(0xfffbf2);
+          dirLight.intensity = lightIntensity * 1.15;
+          dirLight2.color.setHex(0xf1f5f9);
+          dirLight2.intensity = lightIntensity * 0.65;
+          if (dirLight3) {
+            dirLight3.color.setHex(0xffedd5);
+            dirLight3.intensity = lightIntensity * 0.5;
+          }
+          if (dirLight4) {
+            dirLight4.color.setHex(0xe2e8f0);
+            dirLight4.intensity = lightIntensity * 0.45;
+          }
           hemiLight.color.setHex(0xffffff);
-          hemiLight.groundColor.setHex(0x303030);
-          hemiLight.intensity = 0.5;
+          hemiLight.groundColor.setHex(0xe2e8f0);
+          hemiLight.intensity = 0.95;
+          (scene as any).environmentIntensity = 1.15;
+          break;
+        case 'outdoor':
+          ambientLight.color.setHex(0xfffaed);
+          ambientLight.intensity = 0.95;
+          dirLight.color.setHex(0xfff8e7);
+          dirLight.intensity = lightIntensity * 1.25;
+          dirLight2.color.setHex(0xbae6fd);
+          dirLight2.intensity = lightIntensity * 0.7;
+          if (dirLight3) {
+            dirLight3.color.setHex(0xffedd5);
+            dirLight3.intensity = lightIntensity * 0.55;
+          }
+          if (dirLight4) {
+            dirLight4.color.setHex(0xe0f2fe);
+            dirLight4.intensity = lightIntensity * 0.45;
+          }
+          hemiLight.color.setHex(0x93c5fd);
+          hemiLight.groundColor.setHex(0xe2e8f0);
+          hemiLight.intensity = 1.05;
+          (scene as any).environmentIntensity = 1.2;
           break;
         case 'sunset':
           ambientLight.color.setHex(0xffaa77);
-          ambientLight.intensity = 0.5;
+          ambientLight.intensity = 0.8;
           dirLight.color.setHex(0xff8833);
+          dirLight.intensity = lightIntensity * 1.2;
           dirLight2.color.setHex(0xd946ef);
-          dirLight2.intensity = 0.6;
+          dirLight2.intensity = lightIntensity * 0.7;
+          if (dirLight3) {
+            dirLight3.color.setHex(0xf59e0b);
+            dirLight3.intensity = lightIntensity * 0.6;
+          }
+          if (dirLight4) {
+            dirLight4.color.setHex(0xa855f7);
+            dirLight4.intensity = lightIntensity * 0.5;
+          }
           hemiLight.color.setHex(0xffaa66);
-          hemiLight.groundColor.setHex(0x331122);
+          hemiLight.groundColor.setHex(0x4a2818);
+          hemiLight.intensity = 0.85;
+          (scene as any).environmentIntensity = 0.95;
           break;
         case 'night':
-          ambientLight.color.setHex(0x223355);
-          ambientLight.intensity = 0.4;
+          ambientLight.color.setHex(0x475569);
+          ambientLight.intensity = 0.65;
           dirLight.color.setHex(0x38bdf8);
-          dirLight2.color.setHex(0x6366f1);
-          dirLight2.intensity = 0.5;
-          hemiLight.color.setHex(0x1e293b);
-          hemiLight.groundColor.setHex(0x050510);
-          break;
-        case 'outdoor':
-          ambientLight.color.setHex(0xddf0ff);
-          ambientLight.intensity = 0.7;
-          dirLight.color.setHex(0xfffaed);
-          dirLight2.color.setHex(0x38bdf8);
-          dirLight2.intensity = 0.5;
-          hemiLight.color.setHex(0x87ceeb);
-          hemiLight.groundColor.setHex(0x2e8b57);
+          dirLight.intensity = lightIntensity * 0.95;
+          dirLight2.color.setHex(0x818cf8);
+          dirLight2.intensity = lightIntensity * 0.65;
+          if (dirLight3) {
+            dirLight3.color.setHex(0x60a5fa);
+            dirLight3.intensity = lightIntensity * 0.55;
+          }
+          if (dirLight4) {
+            dirLight4.color.setHex(0x4f46e5);
+            dirLight4.intensity = lightIntensity * 0.45;
+          }
+          hemiLight.color.setHex(0x38bdf8);
+          hemiLight.groundColor.setHex(0x1e293b);
+          hemiLight.intensity = 0.7;
+          (scene as any).environmentIntensity = 0.75;
           break;
         case 'neon':
-          ambientLight.color.setHex(0x220533);
-          ambientLight.intensity = 0.3;
+          ambientLight.color.setHex(0x581c87);
+          ambientLight.intensity = 0.7;
           dirLight.color.setHex(0x06b6d4);
+          dirLight.intensity = lightIntensity * 1.15;
           dirLight2.color.setHex(0xf43f5e);
-          dirLight2.intensity = 0.8;
-          hemiLight.color.setHex(0xa855f7);
-          hemiLight.groundColor.setHex(0x0f172a);
+          dirLight2.intensity = lightIntensity * 0.85;
+          if (dirLight3) {
+            dirLight3.color.setHex(0xa855f7);
+            dirLight3.intensity = lightIntensity * 0.7;
+          }
+          if (dirLight4) {
+            dirLight4.color.setHex(0x3b82f6);
+            dirLight4.intensity = lightIntensity * 0.6;
+          }
+          hemiLight.color.setHex(0xc084fc);
+          hemiLight.groundColor.setHex(0x1e1b4b);
+          hemiLight.intensity = 0.75;
+          (scene as any).environmentIntensity = 0.85;
           break;
       }
 
       requestRender();
     }, [lightingPreset, lightIntensity, requestRender]);
 
-    // Update Background Color
+    // Update Background Color and Adaptive Grid Contrast
     useEffect(() => {
       if (!threeRef.current) return;
-      threeRef.current.scene.background = new THREE.Color(bgColor);
+      const { scene, gridHelper, shadowPlane } = threeRef.current;
+      scene.background = new THREE.Color(bgColor);
+
+      // Adapt grid line contrast to background brightness so it remains subtle on both light and dark backgrounds
+      const tempColor = new THREE.Color(bgColor);
+      const luminance = 0.2126 * tempColor.r + 0.7152 * tempColor.g + 0.0722 * tempColor.b;
+      const isLightBg = luminance > 0.45;
+
+      const gridMat = gridHelper.material as THREE.LineBasicMaterial;
+      if (gridMat) {
+        if (isLightBg) {
+          gridMat.color.setHex(0xd4d4d8);
+          gridMat.opacity = 0.6;
+          gridMat.transparent = true;
+        } else {
+          gridMat.color.setHex(0x3d3d3d);
+          gridMat.opacity = 0.85;
+          gridMat.transparent = false;
+        }
+        gridMat.needsUpdate = true;
+      }
+
+      if (shadowPlane) {
+        const shadowMat = shadowPlane.material as THREE.ShadowMaterial;
+        if (shadowMat) {
+          shadowMat.opacity = isLightBg ? 0.16 : 0.25;
+          shadowMat.needsUpdate = true;
+        }
+      }
+
       requestRender();
     }, [bgColor, requestRender]);
 

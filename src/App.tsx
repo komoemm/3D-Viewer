@@ -58,8 +58,8 @@ export default function App() {
 
   // Environment & Display State
   const [lightingPreset, setLightingPreset] = useState<LightingPreset>('studio');
-  const [lightIntensity, setLightIntensity] = useState<number>(1.2);
-  const [bgColor, setBgColor] = useState<string>('#303030');
+  const [lightIntensity, setLightIntensity] = useState<number>(1.6);
+  const [bgColor, setBgColor] = useState<string>('#f5f5f3');
   const [renderMode, setRenderMode] = useState<RenderMode>('default');
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [showAxes, setShowAxes] = useState<boolean>(false);

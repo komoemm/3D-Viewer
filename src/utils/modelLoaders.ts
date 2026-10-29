@@ -423,6 +423,7 @@ export async function downloadModelFile(
  * - Enables frustum culling
  * - Pre-computes bounding box and bounding sphere for accurate spatial clipping
  * - Configures shadow casting/receiving
+ * - Sets double-sided materials and sRGB color space so all 3D parts and interiors are visible without dark face culling
  */
 export function optimizeMeshHierarchy(object: THREE.Object3D): void {
   object.traverse((child) => {
@@ -433,12 +434,42 @@ export function optimizeMeshHierarchy(object: THREE.Object3D): void {
 
       const geom = child.geometry;
       if (geom) {
+        if (!geom.attributes.normal && geom.attributes.position) {
+          try {
+            geom.computeVertexNormals();
+          } catch (_) {}
+        }
         if (!geom.boundingSphere) {
           geom.computeBoundingSphere();
         }
         if (!geom.boundingBox) {
           geom.computeBoundingBox();
         }
+      }
+
+      if (child instanceof THREE.Mesh && child.material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((mat) => {
+          // DoubleSide is essential for CAD, BIM, interior, and character models
+          // so thin walls, panels, range hoods, fabric, and inner geometry are never culled or black
+          mat.side = THREE.DoubleSide;
+
+          if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhysicalMaterial) {
+            if (mat.roughness === undefined || mat.roughness === null) {
+              mat.roughness = 0.45;
+            }
+            if (mat.metalness === undefined || mat.metalness === null) {
+              mat.metalness = 0.1;
+            }
+          }
+
+          // Ensure color texture maps are decoded in sRGB space
+          if ((mat as any).map && (mat as any).map.isTexture) {
+            (mat as any).map.colorSpace = THREE.SRGBColorSpace;
+          }
+
+          mat.needsUpdate = true;
+        });
       }
     }
   });
