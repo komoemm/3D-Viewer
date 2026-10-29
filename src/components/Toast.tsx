@@ -9,7 +9,12 @@ interface ToastProps {
 
 export const ToastContainer: React.FC<ToastProps> = ({ toasts }) => {
   return (
-    <div className="fixed top-20 right-5 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="fixed top-20 right-5 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full"
+    >
       {toasts.map((toast) => (
         <div
           key={toast.id}

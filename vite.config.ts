@@ -39,9 +39,16 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: (id) => {
-            // Isolate Three.js core and loaders into dedicated vendor chunk
-            if (id.includes('node_modules/three') || id.includes('three-stdlib')) {
-              return 'three';
+            // Isolate Three.js loaders (GLTFLoader, OBJLoader, STLLoader, FBXLoader, etc.)
+            if (
+              id.includes('three/examples/jsm/loaders') ||
+              id.includes('three-stdlib')
+            ) {
+              return 'three-loaders';
+            }
+            // Isolate Three.js core
+            if (id.includes('node_modules/three')) {
+              return 'three-core';
             }
             // Isolate web-ifc and web-ifc-three BIM parsers into dedicated chunk
             if (id.includes('node_modules/web-ifc') || id.includes('node_modules/web-ifc-three')) {

@@ -230,10 +230,17 @@ export const ViewportGizmo: React.FC<ViewportGizmoProps> = ({
   };
 
   return (
-    <div className="fixed top-14 right-4 z-30 flex flex-col items-center gap-2 select-none pointer-events-auto">
-      {/* 1. Blender-Style 3D Axis Orientation Gizmo */}
+    <div
+      role="region"
+      aria-label="3D Viewport Navigation Controls"
+      className="fixed top-14 right-4 z-30 flex flex-col items-center gap-2 select-none pointer-events-auto"
+    >
+      {/* 1. 3D Axis Orientation Gizmo */}
       <div
-        className="relative w-28 h-28 flex items-center justify-center cursor-grab active:cursor-grabbing rounded-full bg-[#1c1c1c]/80 backdrop-blur-md border border-[#333333] shadow-2xl p-1 group"
+        role="button"
+        tabIndex={0}
+        aria-label="3D Axis Orientation Gizmo: click axis to align view or drag to orbit scene"
+        className="relative w-28 h-28 flex items-center justify-center cursor-grab active:cursor-grabbing rounded-full bg-[#1c1c1c]/80 backdrop-blur-md border border-[#333333] shadow-2xl p-1 group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
         onPointerDown={handleGizmoPointerDown}
         title="Click axis to align view • Drag to orbit scene"
       >
@@ -354,32 +361,40 @@ export const ViewportGizmo: React.FC<ViewportGizmoProps> = ({
       </div>
 
       {/* 2. Viewport Navigation Tool Strip */}
-      <div className="flex flex-col items-center gap-1.5 p-1 rounded-2xl backdrop-blur-md bg-neutral-900/80 border border-neutral-700/60 shadow-xl">
+      <div
+        role="toolbar"
+        aria-label="Camera navigation tools"
+        className="flex flex-col items-center gap-1.5 p-1 rounded-2xl backdrop-blur-md bg-neutral-900/80 border border-neutral-700/60 shadow-xl"
+      >
         {/* Zoom / Dolly View */}
         <button
           type="button"
           onPointerDown={handleDollyPointerDown}
-          className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#2b2b2b] hover:bg-[#3a3a3a] text-[#cfcfcf] hover:text-white border border-[#3a3a3a] shadow transition-all active:scale-95 cursor-ns-resize"
+          aria-label="Zoom camera view (Click and drag up or down)"
+          className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#2b2b2b] hover:bg-[#3a3a3a] text-[#cfcfcf] hover:text-white border border-[#3a3a3a] shadow transition-all active:scale-95 cursor-ns-resize focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-900"
           title="Zoom View (Click & Drag Up/Down)"
         >
-          <ZoomIn className="w-4 h-4" />
+          <ZoomIn className="w-4 h-4" aria-hidden="true" />
         </button>
 
         {/* Pan / Move View */}
         <button
           type="button"
           onPointerDown={handlePanPointerDown}
-          className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#2b2b2b] hover:bg-[#3a3a3a] text-[#cfcfcf] hover:text-white border border-[#3a3a3a] shadow transition-all active:scale-95 cursor-grab active:cursor-grabbing"
+          aria-label="Pan camera view (Click and drag)"
+          className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#2b2b2b] hover:bg-[#3a3a3a] text-[#cfcfcf] hover:text-white border border-[#3a3a3a] shadow transition-all active:scale-95 cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-900"
           title="Move View / Pan (Click & Drag)"
         >
-          <Hand className="w-4 h-4" />
+          <Hand className="w-4 h-4" aria-hidden="true" />
         </button>
 
         {/* Perspective / Orthographic Toggle */}
         <button
           type="button"
           onClick={onToggleOrthographic}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center border shadow transition-all active:scale-95 cursor-pointer ${
+          aria-label={isOrthographic ? "Switch to Perspective Camera View (Num 5)" : "Switch to Orthographic Camera View (Num 5)"}
+          aria-pressed={isOrthographic}
+          className={`w-8 h-8 rounded-lg flex items-center justify-center border shadow transition-all active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-900 ${
             isOrthographic
               ? 'bg-[#ea7600] text-white border-[#ffaa44] shadow-[#ea7600]/40'
               : 'bg-[#2b2b2b] hover:bg-[#3a3a3a] text-[#cfcfcf] hover:text-white border-[#3a3a3a]'
@@ -390,17 +405,18 @@ export const ViewportGizmo: React.FC<ViewportGizmoProps> = ({
               : 'Perspective View Active • Click for Orthographic View (Num 5)'
           }
         >
-          <Grid3X3 className="w-4 h-4" />
+          <Grid3X3 className="w-4 h-4" aria-hidden="true" />
         </button>
 
         {/* Frame / Focus Selected (F) */}
         <button
           type="button"
           onClick={onFocusSelected}
-          className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#2b2b2b] hover:bg-[#ea7600] text-[#cfcfcf] hover:text-white border border-[#3a3a3a] shadow transition-all active:scale-95 cursor-pointer"
+          aria-label={hasSelection ? 'Frame selected model in center of viewport (F)' : 'Frame all scene models in viewport (F)'}
+          className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#2b2b2b] hover:bg-[#ea7600] text-[#cfcfcf] hover:text-white border border-[#3a3a3a] shadow transition-all active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-900"
           title={hasSelection ? 'Frame Selected Object (F)' : 'Frame Scene (F)'}
         >
-          <Focus className="w-4 h-4" />
+          <Focus className="w-4 h-4" aria-hidden="true" />
         </button>
       </div>
     </div>

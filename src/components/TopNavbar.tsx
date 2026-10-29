@@ -7,6 +7,7 @@ import {
   Camera,
   Layers,
   Sun,
+  Moon,
   Palette,
   Film,
   Activity,
@@ -864,6 +865,65 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           <Upload className="w-3.5 h-3.5" aria-hidden="true" />
           <span className="hidden sm:inline">Open Files</span>
         </button>
+
+        {/* Quick Icon-Only Action Buttons */}
+        <div className="hidden lg:flex items-center gap-1 border-l border-neutral-700/60 pl-1.5" role="group" aria-label="Quick Viewport Utilities">
+          {/* Theme Toggle (Light Studio vs Dark Charcoal) */}
+          <button
+            type="button"
+            role="button"
+            onClick={() => onSetBgColor(bgColor === '#f5f5f3' || bgColor === '#ffffff' ? '#242424' : '#f5f5f3')}
+            aria-label={bgColor === '#f5f5f3' || bgColor === '#ffffff' ? "Switch to dark viewport background" : "Switch to light studio viewport background"}
+            title={bgColor === '#f5f5f3' || bgColor === '#ffffff' ? "Switch to dark background" : "Switch to light studio background"}
+            className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-neutral-800/80 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
+          >
+            {bgColor === '#f5f5f3' || bgColor === '#ffffff' ? (
+              <Moon className="w-3.5 h-3.5 text-blue-300" aria-hidden="true" />
+            ) : (
+              <Sun className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+            )}
+          </button>
+
+          {/* Screenshot Capture Button */}
+          <button
+            type="button"
+            role="button"
+            onClick={onTakeScreenshot}
+            aria-label="Capture high-resolution screenshot of 3D scene"
+            title="Capture Screenshot (PNG)"
+            className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-neutral-800/80 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
+          >
+            <Camera className="w-3.5 h-3.5 text-blue-400" aria-hidden="true" />
+          </button>
+
+          {/* Shortcuts Button */}
+          <button
+            type="button"
+            role="button"
+            onClick={onToggleShortcuts}
+            aria-label="Open keyboard shortcuts cheat sheet modal"
+            title="Keyboard Shortcuts"
+            className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-neutral-800/80 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
+          >
+            <Keyboard className="w-3.5 h-3.5 text-purple-400" aria-hidden="true" />
+          </button>
+
+          {/* Fullscreen Button */}
+          <button
+            type="button"
+            role="button"
+            onClick={handleFullscreen}
+            aria-label={isFullscreen ? "Exit fullscreen mode" : "Enter fullscreen mode"}
+            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+            className="p-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-neutral-800/80 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
+          >
+            {isFullscreen ? (
+              <Minimize className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            ) : (
+              <Maximize className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+            )}
+          </button>
+        </div>
 
         {/* Consolidated Tools (⋯) Dropdown Menu */}
         <div className="relative">

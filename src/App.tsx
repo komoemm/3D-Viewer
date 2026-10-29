@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import * as THREE from 'three';
 import {
   LoadedModel,
@@ -16,9 +16,15 @@ import { ViewportGizmo } from './components/ViewportGizmo';
 import { Viewport3D, ViewportHandle } from './components/Viewport3D';
 import { DropzoneOverlay } from './components/DropzoneOverlay';
 import { ToastContainer } from './components/Toast';
-import { ShortcutsModal } from './components/ShortcutsModal';
-import { ConverterModal } from './components/ConverterModal';
 import { ConverterBar } from './components/ConverterBar';
+
+// Code-split heavy modals to optimize initial Lighthouse TBT and LCP
+const ShortcutsModal = lazy(() =>
+  import('./components/ShortcutsModal').then((m) => ({ default: m.ShortcutsModal }))
+);
+const ConverterModal = lazy(() =>
+  import('./components/ConverterModal').then((m) => ({ default: m.ConverterModal }))
+);
 import {
   loadModelFile,
   createDemoModel,
@@ -567,21 +573,29 @@ export default function App() {
       {/* 7. Non-blocking Toast Alerts */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* 8. Keyboard Shortcuts Modal */}
-      <ShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
-      />
+      {/* 8. Keyboard Shortcuts Modal (Lazy-loaded) */}
+      {isShortcutsOpen && (
+        <Suspense fallback={null}>
+          <ShortcutsModal
+            isOpen={isShortcutsOpen}
+            onClose={() => setIsShortcutsOpen(false)}
+          />
+        </Suspense>
+      )}
 
-      {/* 9. 3D File Converter Modal */}
-      <ConverterModal
-        isOpen={isConverterOpen}
-        onClose={() => setIsConverterOpen(false)}
-        models={models}
-        selectedModelId={selectedModelId}
-        onLoadConvertedModel={(file) => handleFilesSelected([file])}
-        onAddToast={addToast}
-      />
+      {/* 9. 3D File Converter Modal (Lazy-loaded) */}
+      {isConverterOpen && (
+        <Suspense fallback={null}>
+          <ConverterModal
+            isOpen={isConverterOpen}
+            onClose={() => setIsConverterOpen(false)}
+            models={models}
+            selectedModelId={selectedModelId}
+            onLoadConvertedModel={(file) => handleFilesSelected([file])}
+            onAddToast={addToast}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

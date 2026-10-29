@@ -1302,12 +1302,18 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
     }));
 
     return (
-      <div ref={containerRef} className="w-full h-full relative overflow-hidden" role="region" aria-label="3D Viewport Scene">
+      <div
+        ref={containerRef}
+        role="region"
+        aria-label="3D Interactive Model Viewport"
+        tabIndex={0}
+        className="w-full h-full relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
+      >
         <canvas
           ref={canvasRef}
           tabIndex={0}
           role="region"
-          aria-label="3D Model Canvas"
+          aria-label="3D Interactive Model Viewport Canvas"
           className="w-full h-full block cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset"
         >
           <div className="sr-only">
