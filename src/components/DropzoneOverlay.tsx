@@ -1,7 +1,6 @@
 import React from 'react';
 import { UploadCloud, FileCode2, Box, Code2, ArrowRightLeft } from 'lucide-react';
 import { ACCEPTED_FILE_EXTENSIONS } from '../types';
-import { GoogleDriveIcon } from './GoogleDriveModal';
 
 interface DropzoneOverlayProps {
   isDragging: boolean;
@@ -9,7 +8,6 @@ interface DropzoneOverlayProps {
   onOpenFileInput: () => void;
   onLoadDemo: () => void;
   onLoadSampleScript?: () => void;
-  onOpenGoogleDrive?: () => void;
   onOpenConverter?: () => void;
 }
 
@@ -19,7 +17,6 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
   onOpenFileInput,
   onLoadDemo,
   onLoadSampleScript,
-  onOpenGoogleDrive,
   onOpenConverter,
 }) => {
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -89,7 +86,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
           onKeyDown={handleKeyDown}
           className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none p-6 text-center focus:outline-none"
         >
-          <div className="glass-panel p-8 rounded-3xl max-w-lg pointer-events-auto border border-slate-700/80 shadow-2xl space-y-4 focus:ring-2 focus:ring-blue-500/50">
+          <div className="backdrop-blur-md bg-neutral-900/80 p-6 sm:p-8 rounded-3xl max-w-lg pointer-events-auto border border-neutral-700/60 shadow-2xl space-y-4 focus:ring-2 focus:ring-blue-500/50">
             <div className="w-16 h-16 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center mx-auto text-2xl border border-blue-500/40 shadow-inner" aria-hidden="true">
               <Box className="w-8 h-8" />
             </div>
@@ -101,7 +98,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-2.5 justify-center pt-2" role="group" aria-label="Quick model import actions">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5 justify-center pt-2" role="group" aria-label="Quick model import actions">
               <button
                 type="button"
                 role="button"
@@ -113,19 +110,6 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
                 <FileCode2 className="w-4 h-4" aria-hidden="true" />
                 <span>Select 3D Files</span>
               </button>
-              {onOpenGoogleDrive && (
-                <button
-                  type="button"
-                  role="button"
-                  onClick={onOpenGoogleDrive}
-                  aria-label="Import 3D models from Google Drive folder"
-                  title="Import 3D models from Google Drive folder"
-                  className="bg-slate-800 hover:bg-slate-700 border border-blue-500/40 text-blue-200 hover:text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
-                >
-                  <GoogleDriveIcon className="w-4 h-4" aria-hidden="true" />
-                  <span>Google Drive</span>
-                </button>
-              )}
               {onOpenConverter && (
                 <button
                   type="button"
@@ -146,9 +130,9 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
                   onClick={onLoadSampleScript}
                   aria-label="Run sample procedural TypeScript 3D script"
                   title="Run sample TypeScript 3D script"
-                  className="bg-amber-600/25 hover:bg-amber-600/35 border border-amber-500/50 text-amber-200 hover:text-amber-100 font-semibold text-xs px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
+                  className="bg-purple-600/25 hover:bg-purple-600/35 border border-purple-500/50 text-purple-200 hover:text-purple-100 font-semibold text-xs px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
                 >
-                  <Code2 className="w-4 h-4 text-amber-400" aria-hidden="true" />
+                  <Code2 className="w-4 h-4 text-purple-400" aria-hidden="true" />
                   <span>Run Sample .TS Script</span>
                 </button>
               )}

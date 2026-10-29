@@ -27,6 +27,9 @@ import {
   Grid,
   Compass,
   ArrowRightLeft,
+  Wrench,
+  MoreHorizontal,
+  X,
 } from 'lucide-react';
 import {
   LoadedModel,
@@ -35,7 +38,6 @@ import {
   RenderMode,
   GizmoMode,
 } from '../types';
-import { GoogleDriveIcon } from './GoogleDriveModal';
 
 interface TopNavbarProps {
   models: LoadedModel[];
@@ -81,11 +83,10 @@ interface TopNavbarProps {
   onTogglePlayAnim: () => void;
   onStopAnim: () => void;
   onSetAnimSpeed: (speed: number) => void;
-  onOpenGoogleDrive: () => void;
   onOpenConverter: () => void;
 }
 
-type OpenDropdown = 'models' | 'lighting' | 'display' | 'animation' | 'stats' | null;
+type OpenDropdown = 'models' | 'lighting' | 'display' | 'animation' | 'tools' | null;
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({
   models,
@@ -131,7 +132,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onTogglePlayAnim,
   onStopAnim,
   onSetAnimSpeed,
-  onOpenGoogleDrive,
   onOpenConverter,
 }) => {
   const [openMenu, setOpenMenu] = useState<OpenDropdown>(null);
@@ -206,9 +206,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           <div className="w-7 h-7 rounded-lg bg-[#ea7600] flex items-center justify-center shadow-md shadow-[#ea7600]/30 border border-white/20 shrink-0" aria-hidden="true">
             <Box className="w-4 h-4 text-white" />
           </div>
-          <span className="font-semibold text-xs sm:text-sm tracking-wide text-white hidden md:inline">
-            Blender 3D Viewport
-          </span>
+          <h1 className="font-semibold text-xs sm:text-sm tracking-wide text-white hidden md:inline" aria-label="3D Viewer">
+            3D Viewer
+          </h1>
         </div>
 
         {/* 1. Models / Outliner Dropdown */}
@@ -234,30 +234,41 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           </button>
 
           {openMenu === 'models' && (
-            <div className="absolute left-0 mt-2 w-80 sm:w-96 rounded-2xl glass-panel p-3 border border-slate-700/90 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[80vh] overflow-y-auto" role="region" aria-label="Scene Outliner Panel">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
+            <div className="absolute left-0 mt-2 w-80 sm:w-96 rounded-2xl backdrop-blur-md bg-neutral-900/95 p-3 border border-neutral-700/60 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[80vh] overflow-y-auto" role="region" aria-label="Scene Outliner Panel">
+              <div className="flex items-center justify-between pb-2 border-b border-neutral-800 mb-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-blue-400" aria-hidden="true" />
                   <span>Scene Outliner</span>
                 </span>
-                {models.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  {models.length > 0 && (
+                    <button
+                      type="button"
+                      role="button"
+                      onClick={onClearAllModels}
+                      aria-label="Clear all models from scene"
+                      title="Clear all models from scene"
+                      className="text-[11px] text-red-300 hover:text-red-200 font-medium px-2 py-0.5 rounded bg-red-500/20 border border-red-500/30 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                    >
+                      Clear Scene
+                    </button>
+                  )}
                   <button
                     type="button"
-                    role="button"
-                    onClick={onClearAllModels}
-                    aria-label="Clear all models from scene"
-                    title="Clear all models from scene"
-                    className="text-[11px] text-red-300 hover:text-red-200 font-medium px-2 py-0.5 rounded bg-red-500/20 border border-red-500/30 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                    onClick={() => setOpenMenu(null)}
+                    aria-label="Close outliner"
+                    title="Close"
+                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-neutral-800 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-400"
                   >
-                    Clear Scene
+                    <X className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
-                )}
+                </div>
               </div>
 
               {models.length === 0 ? (
                 <div className="py-6 text-center text-slate-300 text-xs space-y-2">
                   <p>No 3D models in scene. Drop files or import models.</p>
-                  <div className="flex items-center justify-center gap-2 pt-1">
+                  <div className="flex items-center justify-center pt-1">
                     <button
                       type="button"
                       role="button"
@@ -267,23 +278,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                       }}
                       aria-label="Open 3D files from local computer"
                       title="Open 3D files (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc, .ts, .js)"
-                      className="px-2.5 py-1 rounded-lg bg-[#ea7600] text-white text-[11px] font-semibold hover:bg-[#d96d00] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                      className="px-3 py-1.5 rounded-lg bg-[#ea7600] text-white text-xs font-semibold hover:bg-[#d96d00] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 flex items-center gap-1.5 shadow-md shadow-[#ea7600]/25"
                     >
-                      Open Files
-                    </button>
-                    <button
-                      type="button"
-                      role="button"
-                      onClick={() => {
-                        setOpenMenu(null);
-                        onOpenGoogleDrive();
-                      }}
-                      aria-label="Import 3D models from Google Drive folder"
-                      title="Import 3D models from Google Drive folder"
-                      className="px-2.5 py-1 rounded-lg bg-blue-600/25 border border-blue-500/50 text-blue-200 text-[11px] font-semibold hover:bg-blue-600/40 transition flex items-center gap-1 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                    >
-                      <GoogleDriveIcon className="w-3 h-3" />
-                      <span>Google Drive</span>
+                      <Upload className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>Open Files</span>
                     </button>
                   </div>
                 </div>
@@ -471,11 +469,21 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           </button>
 
           {openMenu === 'lighting' && (
-            <div className="absolute left-0 mt-2 w-72 rounded-2xl glass-panel p-3 border border-slate-700/90 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-3" role="region" aria-label="Environment Lighting Panel">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5 pb-2 border-b border-slate-800">
-                <Sun className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-                <span>Environment Lighting</span>
-              </span>
+            <div className="absolute left-0 mt-2 w-72 rounded-2xl backdrop-blur-md bg-neutral-900/95 p-3 border border-neutral-700/60 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-3" role="region" aria-label="Environment Lighting Panel">
+              <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Sun className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                  <span>Environment Lighting</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOpenMenu(null)}
+                  aria-label="Close lighting menu"
+                  className="p-1 rounded text-slate-400 hover:text-white hover:bg-neutral-800 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400"
+                >
+                  <X className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </div>
 
               {/* Presets */}
               <div className="space-y-1.5">
@@ -550,11 +558,21 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           </button>
 
           {openMenu === 'display' && (
-            <div className="absolute left-0 mt-2 w-72 rounded-2xl glass-panel p-3 border border-slate-700/90 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-3" role="region" aria-label="Viewport Shading Panel">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5 pb-2 border-b border-slate-800">
-                <Palette className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
-                <span>Viewport Shading & Helpers</span>
-              </span>
+            <div className="absolute left-0 mt-2 w-72 rounded-2xl backdrop-blur-md bg-neutral-900/95 p-3 border border-neutral-700/60 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-3" role="region" aria-label="Viewport Shading Panel">
+              <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
+                  <span>Viewport Shading & Helpers</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOpenMenu(null)}
+                  aria-label="Close display menu"
+                  className="p-1 rounded text-slate-400 hover:text-white hover:bg-neutral-800 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400"
+                >
+                  <X className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </div>
 
               {/* Shading Modes */}
               <div className="space-y-1.5">
@@ -690,300 +708,347 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           )}
         </div>
 
-        {/* 4. Animation Dropdown */}
-        <div className="relative">
-          <button
-            type="button"
-            role="button"
-            onClick={() => toggleDropdown('animation')}
-            aria-label={`Animation timeline: ${animations.length} track${animations.length === 1 ? '' : 's'} available`}
-            aria-haspopup="true"
-            aria-expanded={openMenu === 'animation'}
-            title="Animation Timeline Controls"
-            className={`glass-button px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424] ${
-              openMenu === 'animation' ? 'glass-button-active' : 'text-slate-200 hover:text-white'
-            }`}
-          >
-            <Film className="w-3.5 h-3.5 text-purple-400" aria-hidden="true" />
-            <span className="hidden sm:inline">Animations</span>
-            {animations.length > 0 && (
+        {/* 4. Animation Dropdown - Context-Aware: only shown if loaded model contains animation tracks */}
+        {models.length > 0 && animations.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              role="button"
+              onClick={() => toggleDropdown('animation')}
+              aria-label={`Animation timeline: ${animations.length} track${animations.length === 1 ? '' : 's'} available`}
+              aria-haspopup="true"
+              aria-expanded={openMenu === 'animation'}
+              title="Animation Timeline Controls"
+              className={`glass-button px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424] ${
+                openMenu === 'animation' ? 'glass-button-active' : 'text-slate-200 hover:text-white'
+              }`}
+            >
+              <Film className="w-3.5 h-3.5 text-purple-400" aria-hidden="true" />
+              <span className="hidden sm:inline">Animations</span>
               <span className="w-2 h-2 rounded-full bg-purple-400" aria-hidden="true"></span>
-            )}
-            <ChevronDown className="w-3 h-3 text-slate-300" aria-hidden="true" />
-          </button>
+              <ChevronDown className="w-3 h-3 text-slate-300" aria-hidden="true" />
+            </button>
 
-          {openMenu === 'animation' && (
-            <div className="absolute left-0 mt-2 w-72 rounded-2xl glass-panel p-3 border border-slate-700/90 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-3" role="region" aria-label="Animation Controls Panel">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5 pb-2 border-b border-slate-800">
-                <Film className="w-3.5 h-3.5 text-purple-400" aria-hidden="true" />
-                <span>Animation Timeline</span>
-              </span>
-
-              {animations.length === 0 ? (
-                <div className="py-4 text-center text-slate-300 text-xs">
-                  No skeletal or mesh animation tracks found in selected model.
+            {openMenu === 'animation' && (
+              <div className="absolute left-0 mt-2 w-72 rounded-2xl backdrop-blur-md bg-neutral-900/95 p-3 border border-neutral-700/60 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-3" role="region" aria-label="Animation Controls Panel">
+                <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Film className="w-3.5 h-3.5 text-purple-400" aria-hidden="true" />
+                    <span>Animation Timeline</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenu(null)}
+                    aria-label="Close animation menu"
+                    className="p-1 rounded text-slate-400 hover:text-white hover:bg-neutral-800 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-purple-400"
+                  >
+                    <X className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
                 </div>
-              ) : (
-                <>
-                  {/* Track selector */}
-                  <div className="space-y-1">
-                    <label htmlFor="anim-track-select" className="text-[10px] font-semibold text-slate-300 uppercase">Select Track</label>
-                    <select
-                      id="anim-track-select"
-                      aria-label="Select Animation Track"
-                      value={activeAnimIndex}
-                      onChange={(e) => onSelectAnimTrack(parseInt(e.target.value, 10))}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
-                    >
-                      {animations.map((clip, idx) => (
-                        <option key={idx} value={idx}>
-                          {clip.name || `Animation Clip ${idx + 1}`} ({clip.duration.toFixed(1)}s)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
 
-                  {/* Play Controls */}
-                  <div className="flex items-center gap-2 pt-1" role="group" aria-label="Playback Controls">
-                    <button
-                      type="button"
-                      role="button"
-                      onClick={onTogglePlayAnim}
-                      aria-label={isAnimPlaying ? 'Pause animation playback' : 'Play animation playback'}
-                      title={isAnimPlaying ? 'Pause Animation' : 'Play Animation'}
-                      className={`flex-1 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-                        isAnimPlaying
-                          ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-md shadow-amber-600/30'
-                          : 'bg-blue-600 text-white hover:bg-blue-500 shadow-md shadow-blue-600/30'
-                      }`}
-                    >
-                      {isAnimPlaying ? <Pause className="w-3.5 h-3.5" aria-hidden="true" /> : <Play className="w-3.5 h-3.5" aria-hidden="true" />}
-                      <span>{isAnimPlaying ? 'Pause' : 'Play'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="button"
-                      onClick={onStopAnim}
-                      aria-label="Stop animation and reset timeline to start"
-                      title="Stop Animation"
-                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 rounded-xl text-xs font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
-                    >
-                      <Square className="w-3.5 h-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
+                {/* Track selector */}
+                <div className="space-y-1">
+                  <label htmlFor="anim-track-select" className="text-[10px] font-semibold text-slate-300 uppercase">Select Track</label>
+                  <select
+                    id="anim-track-select"
+                    aria-label="Select Animation Track"
+                    value={activeAnimIndex}
+                    onChange={(e) => onSelectAnimTrack(parseInt(e.target.value, 10))}
+                    className="w-full px-2.5 py-1.5 bg-neutral-950 border border-neutral-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  >
+                    {animations.map((clip, idx) => (
+                      <option key={idx} value={idx}>
+                        {clip.name || `Animation Clip ${idx + 1}`} ({clip.duration.toFixed(1)}s)
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                  {/* Speed slider */}
-                  <div className="space-y-1 pt-1">
-                    <div className="flex justify-between text-[11px]">
-                      <label htmlFor="playback-speed-slider" className="text-slate-300">Playback Speed</label>
-                      <span className="font-mono text-purple-300 font-bold">{animSpeed.toFixed(1)}x</span>
-                    </div>
-                    <input
-                      id="playback-speed-slider"
-                      type="range"
-                      min="0.1"
-                      max="3.0"
-                      step="0.1"
-                      aria-label="Playback Speed"
-                      value={animSpeed}
-                      onChange={(e) => onSetAnimSpeed(parseFloat(e.target.value))}
-                      className="w-full accent-purple-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
-                    />
-                  </div>
-                </>
-              )}
+                {/* Play Controls */}
+                <div className="flex items-center gap-2 pt-1" role="group" aria-label="Playback Controls">
+                  <button
+                    type="button"
+                    role="button"
+                    onClick={onTogglePlayAnim}
+                    aria-label={isAnimPlaying ? 'Pause animation playback' : 'Play animation playback'}
+                    title={isAnimPlaying ? 'Pause Animation' : 'Play Animation'}
+                    className={`flex-1 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+                      isAnimPlaying
+                        ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-md shadow-amber-600/30'
+                        : 'bg-blue-600 text-white hover:bg-blue-500 shadow-md shadow-blue-600/30'
+                    }`}
+                  >
+                    {isAnimPlaying ? <Pause className="w-3.5 h-3.5" aria-hidden="true" /> : <Play className="w-3.5 h-3.5" aria-hidden="true" />}
+                    <span>{isAnimPlaying ? 'Pause' : 'Play'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="button"
+                    onClick={onStopAnim}
+                    aria-label="Stop animation and reset timeline to start"
+                    title="Stop Animation"
+                    className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-slate-200 rounded-xl text-xs font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+                  >
+                    <Square className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                </div>
 
-              {/* Turntable Auto-Rotate */}
-              <div className="pt-2 border-t border-slate-800 space-y-1.5">
-                <label className="flex items-center justify-between text-xs text-slate-200 cursor-pointer">
-                  <span>Turntable Auto-Rotate</span>
+                {/* Speed slider */}
+                <div className="space-y-1 pt-1">
+                  <div className="flex justify-between text-[11px]">
+                    <label htmlFor="playback-speed-slider" className="text-slate-300">Playback Speed</label>
+                    <span className="font-mono text-purple-300 font-bold">{animSpeed.toFixed(1)}x</span>
+                  </div>
                   <input
-                    type="checkbox"
-                    aria-label="Toggle Turntable Auto-Rotate"
-                    checked={autoRotate}
-                    onChange={(e) => onToggleAutoRotate(e.target.checked)}
-                    className="accent-blue-500 rounded focus:ring-2 focus:ring-blue-400"
+                    id="playback-speed-slider"
+                    type="range"
+                    min="0.1"
+                    max="3.0"
+                    step="0.1"
+                    aria-label="Playback Speed"
+                    value={animSpeed}
+                    onChange={(e) => onSetAnimSpeed(parseFloat(e.target.value))}
+                    className="w-full accent-purple-500 cursor-pointer h-1.5 bg-neutral-800 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
                   />
-                </label>
-                {autoRotate && (
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[10px] text-slate-300">
-                      <label htmlFor="turntable-speed-slider">Turntable Speed</label>
-                      <span className="font-mono text-blue-300 font-bold">{rotateSpeed.toFixed(1)}x</span>
-                    </div>
+                </div>
+
+                {/* Turntable Auto-Rotate */}
+                <div className="pt-2 border-t border-neutral-800 space-y-1.5">
+                  <label className="flex items-center justify-between text-xs text-slate-200 cursor-pointer">
+                    <span>Turntable Auto-Rotate</span>
                     <input
-                      id="turntable-speed-slider"
-                      type="range"
-                      min="0.2"
-                      max="4.0"
-                      step="0.2"
-                      aria-label="Turntable Speed"
-                      value={rotateSpeed}
-                      onChange={(e) => onSetRotateSpeed(parseFloat(e.target.value))}
-                      className="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                      type="checkbox"
+                      aria-label="Toggle Turntable Auto-Rotate"
+                      checked={autoRotate}
+                      onChange={(e) => onToggleAutoRotate(e.target.checked)}
+                      className="accent-blue-500 rounded focus:ring-2 focus:ring-blue-400"
                     />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 5. Stats & Info Dropdown */}
-        <div className="relative">
-          <button
-            type="button"
-            role="button"
-            onClick={() => toggleDropdown('stats')}
-            aria-label="Scene telemetry and statistics"
-            aria-haspopup="true"
-            aria-expanded={openMenu === 'stats'}
-            title="Scene Telemetry & Statistics"
-            className={`glass-button px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424] ${
-              openMenu === 'stats' ? 'glass-button-active' : 'text-slate-200 hover:text-white'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-            <span className="hidden sm:inline">Stats</span>
-            <ChevronDown className="w-3 h-3 text-slate-300" aria-hidden="true" />
-          </button>
-
-          {openMenu === 'stats' && (
-            <div className="absolute left-0 mt-2 w-72 rounded-2xl glass-panel p-3 border border-slate-700/90 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-2.5" role="region" aria-label="Scene Statistics Panel">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5 pb-2 border-b border-slate-800">
-                <Activity className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-                <span>Scene Telemetry & Statistics</span>
-              </span>
-
-              <div className="grid grid-cols-2 gap-2" role="group" aria-label="Telemetry metrics">
-                <div className="p-2 bg-slate-950/80 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-300">Frame Rate</div>
-                  <div className="text-sm font-mono font-bold text-emerald-400">{fps} FPS</div>
-                </div>
-                <div className="p-2 bg-slate-950/80 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-300">Total Models</div>
-                  <div className="text-sm font-mono font-bold text-white">{models.length}</div>
-                </div>
-                <div className="p-2 bg-slate-950/80 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-300">Triangles</div>
-                  <div className="text-sm font-mono font-bold text-blue-400">
-                    {totalStats.triangles.toLocaleString()}
-                  </div>
-                </div>
-                <div className="p-2 bg-slate-950/80 rounded-xl border border-slate-800">
-                  <div className="text-[10px] text-slate-300">Vertices</div>
-                  <div className="text-sm font-mono font-bold text-indigo-400">
-                    {totalStats.vertices.toLocaleString()}
-                  </div>
+                  </label>
+                  {autoRotate && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-slate-300">
+                        <label htmlFor="turntable-speed-slider">Turntable Speed</label>
+                        <span className="font-mono text-blue-300 font-bold">{rotateSpeed.toFixed(1)}x</span>
+                      </div>
+                      <input
+                        id="turntable-speed-slider"
+                        type="range"
+                        min="0.2"
+                        max="4.0"
+                        step="0.2"
+                        aria-label="Turntable Speed"
+                        value={rotateSpeed}
+                        onChange={(e) => onSetRotateSpeed(parseFloat(e.target.value))}
+                        className="w-full accent-blue-500 cursor-pointer h-1.5 bg-neutral-800 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
-
-              {selectedModel && (
-                <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-300 space-y-1">
-                  <div className="font-semibold text-slate-200">Selected: {selectedModel.name}</div>
-                  <div className="flex justify-between">
-                    <span>Bounding Box:</span>
-                    <span className="font-mono text-white">
-                      {selectedModel.stats.size.x.toFixed(1)} × {selectedModel.stats.size.y.toFixed(1)} × {selectedModel.stats.size.z.toFixed(1)}m
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Right Area: Action Buttons */}
+      {/* Right Area: Essential Action [Open Files] and Consolidated [Tools] Menu */}
       <div className="flex items-center gap-1.5 sm:gap-2" role="toolbar" aria-label="Quick Actions">
-        {/* Open Files Button */}
+        {/* Essential Primary Action: Open Files Button */}
         <button
           type="button"
           role="button"
           onClick={() => fileInputRef.current?.click()}
           aria-label="Open 3D files from local computer (.glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .ts, .js)"
           title="Open .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc files"
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#ea7600] hover:bg-[#d96d00] shadow-md shadow-[#ea7600]/25 flex items-center gap-1.5 transition active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
+          className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-[#ea7600] hover:bg-[#d96d00] shadow-md shadow-[#ea7600]/25 flex items-center gap-1.5 transition active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
         >
           <Upload className="w-3.5 h-3.5" aria-hidden="true" />
           <span className="hidden sm:inline">Open Files</span>
         </button>
 
-        {/* Google Drive Button */}
-        <button
-          type="button"
-          role="button"
-          onClick={onOpenGoogleDrive}
-          aria-label="Import 3D models from Google Drive folder"
-          title="Import 3D models from Google Drive folder"
-          className="glass-button px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-1.5 transition active:scale-95 cursor-pointer border border-blue-500/40 hover:border-blue-400/70 hover:bg-blue-600/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
-        >
-          <GoogleDriveIcon className="w-3.5 h-3.5" aria-hidden="true" />
-          <span className="hidden sm:inline">Google Drive</span>
-        </button>
+        {/* Consolidated Tools (⋯) Dropdown Menu */}
+        <div className="relative">
+          <button
+            type="button"
+            role="button"
+            onClick={() => toggleDropdown('tools')}
+            aria-label="Tools menu and utilities"
+            aria-haspopup="true"
+            aria-expanded={openMenu === 'tools'}
+            title="Tools & More Options"
+            className={`glass-button px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424] ${
+              openMenu === 'tools' ? 'glass-button-active' : 'text-slate-200 hover:text-white'
+            }`}
+          >
+            <MoreHorizontal className="w-4 h-4 text-slate-300" aria-hidden="true" />
+            <span className="hidden sm:inline">Tools</span>
+            <ChevronDown className="w-3 h-3 text-slate-400" aria-hidden="true" />
+          </button>
 
-        {/* 3D Converter Button */}
-        <button
-          type="button"
-          role="button"
-          onClick={onOpenConverter}
-          aria-label="Open client-side 3D File Converter (Convert to PLY, OBJ, STL)"
-          title="Convert 3D Models (to PLY, OBJ, STL)"
-          className="glass-button px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-1.5 transition active:scale-95 cursor-pointer border border-amber-500/40 hover:border-amber-400/70 hover:bg-amber-600/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
-        >
-          <ArrowRightLeft className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span className="hidden sm:inline">Convert 3D</span>
-        </button>
+          {openMenu === 'tools' && (
+            <div
+              className="absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl backdrop-blur-md bg-neutral-900/95 border border-neutral-700/60 shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-2.5 text-xs text-[#e0e0e0]"
+              role="region"
+              aria-label="Tools Menu"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Wrench className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                  <span>Tools & Utilities</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOpenMenu(null)}
+                  aria-label="Close tools menu"
+                  className="p-1 rounded text-slate-400 hover:text-white hover:bg-neutral-800 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400"
+                >
+                  <X className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </div>
 
-        {/* Demo Object */}
-        <button
-          type="button"
-          role="button"
-          onClick={onGenerateDemo}
-          aria-label="Generate procedural demo 3D sculpture object"
-          title="Generate Procedural Demo 3D Object"
-          className="glass-button px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium text-slate-200 hover:text-white flex items-center gap-1.5 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
-          <span className="hidden md:inline">Demo Object</span>
-        </button>
+              {/* Items List */}
+              <div className="space-y-1">
+                {/* 1. 3D Converter */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenMenu(null);
+                    onOpenConverter();
+                  }}
+                  className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-neutral-800/80 transition cursor-pointer text-slate-200 hover:text-white group border border-transparent hover:border-neutral-700"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/30">
+                    <ArrowRightLeft className="w-3.5 h-3.5" aria-hidden="true" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-xs text-white group-hover:text-amber-300 transition-colors">
+                      Convert 3D Model
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Convert to GLB, USDZ, PLY, OBJ, STL
+                    </div>
+                  </div>
+                </button>
 
-        {/* Screenshot */}
-        <button
-          type="button"
-          role="button"
-          onClick={onTakeScreenshot}
-          aria-label="Capture high-resolution PNG screenshot of the 3D scene"
-          title="Capture High-Res PNG Screenshot"
-          className="glass-button px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium text-slate-200 hover:text-white flex items-center gap-1.5 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
-        >
-          <Camera className="w-3.5 h-3.5 text-blue-400" aria-hidden="true" />
-          <span className="hidden lg:inline">Capture</span>
-        </button>
+                {/* 2. Demo Object */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenMenu(null);
+                    onGenerateDemo();
+                  }}
+                  className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-neutral-800/80 transition cursor-pointer text-slate-200 hover:text-white group border border-transparent hover:border-neutral-700"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-[#ea7600]/20 text-amber-400 flex items-center justify-center shrink-0 border border-[#ea7600]/30">
+                    <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-xs text-white group-hover:text-amber-400 transition-colors">
+                      Sample 3D Object
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Generate procedural geometric test model
+                    </div>
+                  </div>
+                </button>
 
-        {/* Shortcuts Modal Trigger */}
-        <button
-          type="button"
-          role="button"
-          onClick={onToggleShortcuts}
-          aria-label="View keyboard shortcuts cheat sheet"
-          title="Keyboard Shortcuts"
-          className="glass-button p-1.5 rounded-xl text-slate-300 hover:text-white transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
-        >
-          <Keyboard className="w-4 h-4" aria-hidden="true" />
-        </button>
+                {/* 3. Screenshot Capture */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenMenu(null);
+                    onTakeScreenshot();
+                  }}
+                  className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-neutral-800/80 transition cursor-pointer text-slate-200 hover:text-white group border border-transparent hover:border-neutral-700"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center shrink-0 border border-blue-500/30">
+                    <Camera className="w-3.5 h-3.5" aria-hidden="true" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-xs text-white group-hover:text-blue-300 transition-colors">
+                      Capture Screenshot
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Save high-res PNG image of the 3D scene
+                    </div>
+                  </div>
+                </button>
 
-        {/* Fullscreen */}
-        <button
-          type="button"
-          role="button"
-          onClick={handleFullscreen}
-          aria-label={isFullscreen ? 'Exit fullscreen mode' : 'Enter fullscreen mode'}
-          title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-          className="glass-button p-1.5 rounded-xl text-slate-300 hover:text-white transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
-        >
-          {isFullscreen ? <Minimize className="w-4 h-4" aria-hidden="true" /> : <Maximize className="w-4 h-4" aria-hidden="true" />}
-        </button>
+                {/* 4. Keyboard Shortcuts */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenMenu(null);
+                    onToggleShortcuts();
+                  }}
+                  className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-neutral-800/80 transition cursor-pointer text-slate-200 hover:text-white group border border-transparent hover:border-neutral-700"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center shrink-0 border border-purple-500/30">
+                    <Keyboard className="w-3.5 h-3.5" aria-hidden="true" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-xs text-white group-hover:text-purple-300 transition-colors">
+                      Keyboard Shortcuts
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Hotkeys cheat sheet (W/E/R, 1/3/7, Space)
+                    </div>
+                  </div>
+                </button>
+
+                {/* 5. Fullscreen Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenMenu(null);
+                    handleFullscreen();
+                  }}
+                  className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-neutral-800/80 transition cursor-pointer text-slate-200 hover:text-white group border border-transparent hover:border-neutral-700"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                    {isFullscreen ? (
+                      <Minimize className="w-3.5 h-3.5" aria-hidden="true" />
+                    ) : (
+                      <Maximize className="w-3.5 h-3.5" aria-hidden="true" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-xs text-white group-hover:text-emerald-300 transition-colors">
+                      {isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Toggle full window 3D viewport canvas
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Scene Telemetry Summary Footer */}
+              <div className="pt-2 border-t border-neutral-800">
+                <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                  <span className="flex items-center gap-1 font-semibold text-slate-300">
+                    <Activity className="w-3 h-3 text-emerald-400" /> Scene Telemetry
+                  </span>
+                  <span className="font-mono text-emerald-400 font-bold">{fps} FPS</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 text-[10px] font-mono text-slate-300 bg-neutral-950/80 p-1.5 rounded-lg border border-neutral-800 text-center">
+                  <div>
+                    <span className="block text-slate-500 text-[9px]">MODELS</span>
+                    <span className="font-bold text-white">{models.length}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-500 text-[9px]">TRIS</span>
+                    <span className="font-bold text-blue-400">{totalStats.triangles.toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-500 text-[9px]">VERTS</span>
+                    <span className="font-bold text-indigo-400">{totalStats.vertices.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

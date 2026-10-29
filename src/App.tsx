@@ -17,7 +17,6 @@ import { Viewport3D, ViewportHandle } from './components/Viewport3D';
 import { DropzoneOverlay } from './components/DropzoneOverlay';
 import { ToastContainer } from './components/Toast';
 import { ShortcutsModal } from './components/ShortcutsModal';
-import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { ConverterModal } from './components/ConverterModal';
 import { ConverterBar } from './components/ConverterBar';
 import {
@@ -80,8 +79,8 @@ export default function App() {
   // UI State
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
-  const [isGoogleDriveOpen, setIsGoogleDriveOpen] = useState<boolean>(false);
   const [isConverterOpen, setIsConverterOpen] = useState<boolean>(false);
+  const [isConverterBarVisible, setIsConverterBarVisible] = useState<boolean>(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Toast Helper
@@ -498,47 +497,50 @@ export default function App() {
         onTogglePlayAnim={() => setIsAnimPlaying((p) => !p)}
         onStopAnim={() => setIsAnimPlaying(false)}
         onSetAnimSpeed={setAnimSpeed}
-        onOpenGoogleDrive={() => setIsGoogleDriveOpen(true)}
         onOpenConverter={() => setIsConverterOpen(true)}
       />
 
-      {/* 3. Floating Transform HUD (Top-Center) */}
-      <TransformHUD
-        mode={gizmoMode}
-        space={transformSpace}
-        hasSelection={!!selectedModelId && !!selectedModel}
-        selectedModelName={selectedModel?.name}
-        onSetMode={(mode) => setGizmoMode(mode)}
-        onToggleSpace={() =>
-          setTransformSpace((prev) => (prev === 'world' ? 'local' : 'world'))
-        }
-        onDeselect={() => {
-          setGizmoMode(null);
-          setSelectedModelId(null);
-        }}
-        onOpenConverter={() => setIsConverterOpen(true)}
-      />
-
-      {/* 4. Blender-Style 3D Viewport Orientation Gizmo & Navigation Strip */}
-      <ViewportGizmo
-        onSetCameraView={(view: CameraView) => viewportRef.current?.setCameraView(view)}
-        onOrbit={(dx, dy) => viewportRef.current?.orbit(dx, dy)}
-        onDolly={(dy) => viewportRef.current?.dolly(dy)}
-        onPan={(dx, dy) => viewportRef.current?.pan(dx, dy)}
-        onToggleOrthographic={() => setIsOrthographic((prev) => !prev)}
-        isOrthographic={isOrthographic}
-        onFocusSelected={() => {
-          if (selectedModelId) {
-            viewportRef.current?.focusModel(selectedModelId);
-          } else {
-            viewportRef.current?.focusAll();
+      {/* 3. Floating Transform HUD (Top-Center) - Context-aware: only shown when a model/mesh is actively selected */}
+      {models.length > 0 && !!selectedModelId && !!selectedModel && (
+        <TransformHUD
+          mode={gizmoMode}
+          space={transformSpace}
+          hasSelection={true}
+          selectedModelName={selectedModel?.name}
+          onSetMode={(mode) => setGizmoMode(mode)}
+          onToggleSpace={() =>
+            setTransformSpace((prev) => (prev === 'world' ? 'local' : 'world'))
           }
-        }}
-        hasSelection={!!selectedModelId}
-        cameraQuaternionRef={cameraQuaternionRef}
-      />
+          onDeselect={() => {
+            setGizmoMode(null);
+            setSelectedModelId(null);
+          }}
+          onOpenConverter={() => setIsConverterOpen(true)}
+        />
+      )}
 
-      {/* 5. Drag & Drop Overlay & Empty State */}
+      {/* 4. 3D Viewport Orientation Gizmo & Navigation Strip - only shown when scene has models */}
+      {models.length > 0 && (
+        <ViewportGizmo
+          onSetCameraView={(view: CameraView) => viewportRef.current?.setCameraView(view)}
+          onOrbit={(dx, dy) => viewportRef.current?.orbit(dx, dy)}
+          onDolly={(dy) => viewportRef.current?.dolly(dy)}
+          onPan={(dx, dy) => viewportRef.current?.pan(dx, dy)}
+          onToggleOrthographic={() => setIsOrthographic((prev) => !prev)}
+          isOrthographic={isOrthographic}
+          onFocusSelected={() => {
+            if (selectedModelId) {
+              viewportRef.current?.focusModel(selectedModelId);
+            } else {
+              viewportRef.current?.focusAll();
+            }
+          }}
+          hasSelection={!!selectedModelId}
+          cameraQuaternionRef={cameraQuaternionRef}
+        />
+      )}
+
+      {/* 5. Drag & Drop Overlay & Empty State - when models are loaded, central card is automatically dismissed */}
       <DropzoneOverlay
         isDragging={isDragging}
         modelCount={models.length}
@@ -548,16 +550,16 @@ export default function App() {
         }}
         onLoadDemo={handleGenerateDemo}
         onLoadSampleScript={handleLoadSampleScript}
-        onOpenGoogleDrive={() => setIsGoogleDriveOpen(true)}
         onOpenConverter={() => setIsConverterOpen(true)}
       />
 
-      {/* 6. Quick Converter Bar (Docked when models are loaded) */}
-      {models.length > 0 && (
+      {/* 6. Quick Converter Bar (Docked when models are loaded, dismissable to maximize viewport) */}
+      {models.length > 0 && isConverterBarVisible && (
         <ConverterBar
           models={models}
           selectedModelId={selectedModelId}
           onOpenConverterModal={() => setIsConverterOpen(true)}
+          onClose={() => setIsConverterBarVisible(false)}
           onAddToast={addToast}
         />
       )}
@@ -571,16 +573,7 @@ export default function App() {
         onClose={() => setIsShortcutsOpen(false)}
       />
 
-      {/* 9. Google Drive Importer Modal */}
-      <GoogleDriveModal
-        isOpen={isGoogleDriveOpen}
-        onClose={() => setIsGoogleDriveOpen(false)}
-        onLoadModelFile={(file) => handleFilesSelected([file])}
-        loadedModelNames={models.map((m) => m.name)}
-        onAddToast={addToast}
-      />
-
-      {/* 10. 3D File Converter Modal */}
+      {/* 9. 3D File Converter Modal */}
       <ConverterModal
         isOpen={isConverterOpen}
         onClose={() => setIsConverterOpen(false)}

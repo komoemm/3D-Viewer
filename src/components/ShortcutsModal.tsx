@@ -45,8 +45,8 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
       aria-labelledby="shortcuts-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 select-none"
     >
-      <div className="w-full max-w-md rounded-2xl p-5 bg-[#202020]/95 border border-[#3a3a3a] shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 text-slate-200">
-        <div className="flex items-center justify-between pb-3 border-b border-[#333333]">
+      <div className="w-full max-w-md rounded-2xl p-5 backdrop-blur-md bg-neutral-900/90 border border-neutral-700/60 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 text-slate-200">
+        <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
           <div id="shortcuts-title" className="flex items-center gap-2 text-white font-semibold text-sm">
             <Keyboard className="w-4 h-4 text-[#ea7600]" aria-hidden="true" />
             <span>Blender 3D Viewport Shortcuts</span>

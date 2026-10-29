@@ -353,8 +353,8 @@ export const ViewportGizmo: React.FC<ViewportGizmoProps> = ({
         </svg>
       </div>
 
-      {/* 2. Blender Viewport Navigation Tool Strip */}
-      <div className="flex flex-col items-center gap-1.5 p-1 rounded-xl bg-[#202020]/90 border border-[#383838] shadow-xl backdrop-blur-md">
+      {/* 2. Viewport Navigation Tool Strip */}
+      <div className="flex flex-col items-center gap-1.5 p-1 rounded-2xl backdrop-blur-md bg-neutral-900/80 border border-neutral-700/60 shadow-xl">
         {/* Zoom / Dolly View */}
         <button
           type="button"

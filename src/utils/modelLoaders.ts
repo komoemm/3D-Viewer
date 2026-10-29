@@ -348,7 +348,7 @@ export function getActiveLoadingSignal(): AbortSignal | null {
 }
 
 /**
- * Downloads a model file from a remote URL or Google Drive link using fetch
+ * Downloads a model file from a remote URL using fetch
  * with stream progress support and full AbortSignal cancellation.
  */
 export async function downloadModelFile(

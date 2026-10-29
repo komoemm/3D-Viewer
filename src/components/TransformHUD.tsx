@@ -1,5 +1,5 @@
 import React from 'react';
-import { Move, RotateCw, Maximize2, XCircle, Globe, Box, ArrowRightLeft } from 'lucide-react';
+import { Move, RotateCw, Maximize2, X, XCircle, Globe, Box, ArrowRightLeft } from 'lucide-react';
 import { GizmoMode, TransformSpace } from '../types';
 
 interface TransformHUDProps {
@@ -23,28 +23,40 @@ export const TransformHUD: React.FC<TransformHUDProps> = ({
   onDeselect,
   onOpenConverter,
 }) => {
+  // Only display Transform HUD when a model/mesh is actively selected
+  if (!hasSelection || !selectedModelName) {
+    return null;
+  }
+
   return (
     <nav
       aria-label="3D Transform Controls"
-      className="absolute top-14 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 pointer-events-auto select-none"
+      className="absolute top-14 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 pointer-events-auto select-none animate-in fade-in slide-in-from-top-2 duration-150"
     >
-      {/* Selected Model Tag (if selected) */}
-      {hasSelection && selectedModelName && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="px-3 py-0.5 rounded-full bg-[#242424] border border-[#ea7600] text-amber-200 text-xs font-semibold backdrop-blur-md shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150"
+      {/* Selected Model Tag with Close/Deselect button */}
+      <div
+        role="status"
+        aria-live="polite"
+        className="px-2.5 py-1 rounded-full backdrop-blur-md bg-neutral-900/85 border border-amber-500/50 text-amber-200 text-xs font-semibold shadow-lg flex items-center gap-2"
+      >
+        <span className="w-2 h-2 rounded-full bg-[#ea7600] animate-pulse" aria-hidden="true"></span>
+        <span className="truncate max-w-[200px] sm:max-w-[260px]">{selectedModelName}</span>
+        <button
+          type="button"
+          onClick={onDeselect}
+          aria-label="Deselect model (Esc / Q)"
+          title="Deselect model (Esc / Q)"
+          className="p-0.5 rounded-full text-slate-400 hover:text-white hover:bg-neutral-800 transition cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400"
         >
-          <span className="w-2 h-2 rounded-full bg-[#ea7600] animate-ping" aria-hidden="true"></span>
-          <span className="truncate max-w-[240px]">Selected: {selectedModelName}</span>
-        </div>
-      )}
+          <X className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+      </div>
 
       {/* Main HUD Toolbar */}
       <div
         role="toolbar"
         aria-label="Model manipulation modes"
-        className="bg-[#242424]/95 p-1 rounded-xl flex items-center gap-1 shadow-2xl border border-[#383838] backdrop-blur-xl"
+        className="backdrop-blur-md bg-neutral-900/80 p-1 rounded-2xl flex items-center gap-1 shadow-2xl border border-neutral-700/60"
       >
         {/* Deselect / Select Mode */}
         <button

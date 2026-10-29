@@ -366,10 +366,10 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
       <div
         ref={dialogRef}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl bg-[#202020] border border-[#3c3c3c] rounded-2xl shadow-2xl overflow-hidden flex flex-col text-[#e0e0e0] font-sans"
+        className="w-full max-w-xl backdrop-blur-md bg-neutral-900/95 border border-neutral-700/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col text-[#e0e0e0] font-sans"
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-[#262626] border-b border-[#383838]">
+        <div className="flex items-center justify-between px-5 py-3.5 bg-neutral-800/80 border-b border-neutral-700/60">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-[#ea7600] flex items-center justify-center text-white shadow-md shadow-[#ea7600]/30 border border-white/20">
               <ArrowRightLeft className="w-4 h-4" aria-hidden="true" />

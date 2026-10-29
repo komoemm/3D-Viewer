@@ -24,6 +24,7 @@ interface ConverterBarProps {
   models: LoadedModel[];
   selectedModelId: string | null;
   onOpenConverterModal: () => void;
+  onClose?: () => void;
   onAddToast?: (message: string, type: 'info' | 'success' | 'error') => void;
 }
 
@@ -31,6 +32,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
   models,
   selectedModelId,
   onOpenConverterModal,
+  onClose,
   onAddToast,
 }) => {
   const [targetFormat, setTargetFormat] = useState<TargetFormat | 'fbx'>('glb');
@@ -117,13 +119,13 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
   return (
     <aside
       aria-label="3D Quick Format Converter Bar"
-      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto select-none max-w-[94vw] sm:max-w-2xl"
+      className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto select-none max-w-[94vw] sm:max-w-2xl animate-in fade-in slide-in-from-bottom-2 duration-150"
     >
-      <div className="bg-[#202020]/95 backdrop-blur-xl border border-[#3c3c3c] rounded-2xl shadow-2xl p-2 sm:p-2.5 flex flex-col gap-2 text-white text-xs">
+      <div className="backdrop-blur-md bg-neutral-900/85 border border-neutral-700/60 rounded-2xl shadow-2xl p-2 sm:p-2.5 flex flex-col gap-2 text-white text-xs">
         {/* Top Header / Minimized Bar */}
         <div className="flex items-center justify-between gap-3 px-1">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-5 h-5 rounded-lg bg-[#ea7600] flex items-center justify-center text-white shrink-0">
+            <div className="w-5 h-5 rounded-lg bg-[#ea7600] flex items-center justify-center text-white shrink-0 shadow-sm shadow-[#ea7600]/30">
               <ArrowRightLeft className="w-3 h-3" aria-hidden="true" />
             </div>
             <span className="font-bold text-xs text-white truncate flex items-center gap-1.5">
@@ -140,7 +142,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
               onClick={onOpenConverterModal}
               title="Open full Converter options modal"
               aria-label="Open full 3D Converter modal options"
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020]"
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-neutral-800 transition cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400"
             >
               <Settings className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
@@ -148,7 +150,8 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
               type="button"
               onClick={() => setIsMinimized((prev) => !prev)}
               aria-label={isMinimized ? 'Expand quick converter bar' : 'Minimize quick converter bar'}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#202020]"
+              title={isMinimized ? 'Expand Converter' : 'Minimize Converter'}
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-neutral-800 transition cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400"
             >
               {isMinimized ? (
                 <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
@@ -156,6 +159,17 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
                 <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
               )}
             </button>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close quick converter bar"
+                title="Close Converter Bar"
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-neutral-800 transition cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400"
+              >
+                <X className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
 
