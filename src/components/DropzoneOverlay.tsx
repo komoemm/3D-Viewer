@@ -1,5 +1,5 @@
 import React from 'react';
-import { UploadCloud, FileCode2, Box, Code2, ArrowRightLeft } from 'lucide-react';
+import { UploadCloud, FileCode2, Box, Code2, ArrowRightLeft, ExternalLink } from 'lucide-react';
 import { ACCEPTED_FILE_EXTENSIONS } from '../types';
 
 interface DropzoneOverlayProps {
@@ -170,6 +170,21 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
               <span className="text-amber-300 font-bold">.TS</span>
               <span className="text-slate-500" aria-hidden="true">•</span>
               <span className="text-amber-300 font-bold">.JS</span>
+            </div>
+
+            {/* Small External Web Link */}
+            <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
+              <span>Looking for 2D/3D Drawing?</span>
+              <a
+                href="https://2d-3d-drawing.iida.website/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Visit 2D/3D Drawing web app at 2d-3d-drawing.iida.website (opens in new tab)"
+                className="text-blue-400 hover:text-blue-300 underline underline-offset-2 flex items-center gap-1 font-medium transition cursor-pointer"
+              >
+                <span>2d-3d-drawing.iida.website</span>
+                <ExternalLink className="w-3 h-3 inline-block" aria-hidden="true" />
+              </a>
             </div>
           </div>
         </div>

@@ -30,6 +30,7 @@ import {
   ArrowRightLeft,
   Wrench,
   MoreHorizontal,
+  ExternalLink,
   X,
 } from 'lucide-react';
 import {
@@ -923,6 +924,20 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               <Maximize className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
             )}
           </button>
+
+          {/* Small Web Link: 2D-3D Drawing */}
+          <a
+            href="https://2d-3d-drawing.iida.website/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Visit 2D/3D Drawing web app at 2d-3d-drawing.iida.website (opens in new tab)"
+            title="Visit 2D/3D Drawing (https://2d-3d-drawing.iida.website/)"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-neutral-800/80 hover:bg-neutral-700/80 border border-neutral-700/60 shadow-sm transition active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
+            <span>2D/3D Drawing</span>
+            <ExternalLink className="w-3 h-3 text-slate-400" aria-hidden="true" />
+          </a>
         </div>
 
         {/* Consolidated Tools (⋯) Dropdown Menu */}
@@ -1081,6 +1096,28 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                     </div>
                   </div>
                 </button>
+
+                {/* 6. 2D / 3D Drawing External Web Link */}
+                <a
+                  href="https://2d-3d-drawing.iida.website/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setOpenMenu(null)}
+                  className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-neutral-800/80 transition cursor-pointer text-slate-200 hover:text-white group border border-transparent hover:border-neutral-700"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-300 flex items-center justify-center shrink-0 border border-teal-500/30">
+                    <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-xs text-white group-hover:text-teal-300 transition-colors flex items-center gap-1.5">
+                      <span>2D / 3D Drawing</span>
+                      <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-teal-300" />
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      2d-3d-drawing.iida.website
+                    </div>
+                  </div>
+                </a>
               </div>
 
               {/* Scene Telemetry Summary Footer */}

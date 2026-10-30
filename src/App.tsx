@@ -17,6 +17,7 @@ import { Viewport3D, ViewportHandle } from './components/Viewport3D';
 import { DropzoneOverlay } from './components/DropzoneOverlay';
 import { ToastContainer } from './components/Toast';
 import { ConverterBar } from './components/ConverterBar';
+import { ExternalLink } from 'lucide-react';
 
 // Code-split heavy modals to optimize initial Lighthouse TBT and LCP
 const ShortcutsModal = lazy(() =>
@@ -596,6 +597,25 @@ export default function App() {
           />
         </Suspense>
       )}
+
+      {/* 10. Small Web Link Badge */}
+      <aside
+        aria-label="External link to 2D-3D Drawing"
+        className="absolute bottom-3 left-3 z-20 pointer-events-auto"
+      >
+        <a
+          href="https://2d-3d-drawing.iida.website/"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Visit 2D-3D Drawing web app at 2d-3d-drawing.iida.website (opens in new tab)"
+          title="Visit 2D-3D Drawing • https://2d-3d-drawing.iida.website/"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl backdrop-blur-md bg-neutral-900/80 hover:bg-neutral-800 border border-neutral-700/60 text-slate-300 hover:text-white text-[11px] font-medium shadow-lg transition duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-900"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+          <span>2D-3D Drawing</span>
+          <ExternalLink className="w-3 h-3 text-slate-400" aria-hidden="true" />
+        </a>
+      </aside>
     </div>
   );
 }
