@@ -47,7 +47,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
           Drop 3D Models or Three.js Scripts Here
         </h2>
         <p className="text-slate-300 text-xs sm:text-sm mb-4 text-center max-w-lg px-4">
-          Compatible with .GLB, .GLTF, .FBX, .PLY, .SPZ, .OBJ, .STL, .IFC (BIM), and dynamic Three.js scripts (.TS, .JS)
+          Compatible with .GLB, .GLTF, .FBX, .PLY, .SPZ, .OBJ, .STL, .IFC (BIM), .TS/.JS scripts, and Three-Live (.HTML)
         </p>
         <div className="flex flex-wrap gap-2 justify-center max-w-xl px-4" role="list" aria-label="Supported file formats">
           {[
@@ -59,6 +59,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
             '.OBJ',
             '.STL',
             '.IFC (BIM)',
+            '.HTML (Three-Live)',
             '.TS (Three.js)',
             '.JS (Three.js)',
           ].map((fmt) => (
@@ -68,6 +69,8 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
               className={`px-2.5 py-1 border rounded-lg text-xs font-mono font-medium ${
                 fmt.includes('.TS') || fmt.includes('.JS')
                   ? 'bg-amber-950/60 border-amber-500/70 text-amber-200'
+                  : fmt.includes('.HTML')
+                  ? 'bg-blue-950/60 border-blue-500/70 text-blue-200'
                   : fmt.includes('.IFC')
                   ? 'bg-teal-950/60 border-teal-500/70 text-teal-200'
                   : 'bg-slate-900/90 border-slate-700 text-blue-300'

@@ -40,6 +40,7 @@ import {
   LightingPreset,
   RenderMode,
   GizmoMode,
+  ACCEPTED_FILE_EXTENSIONS,
 } from '../types';
 
 interface TopNavbarProps {
@@ -197,8 +198,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
       <input
         ref={fileInputRef}
         type="file"
-        aria-label="Upload 3D model files or Three.js scripts"
-        accept=".glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ifc,.ts,.js,text/javascript,application/typescript"
+        aria-label="Upload 3D model files, Three.js scripts, or Three-Live HTML"
+        accept={ACCEPTED_FILE_EXTENSIONS}
         multiple
         onChange={handleFileChange}
         className="hidden"

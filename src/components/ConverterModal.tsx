@@ -287,6 +287,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
           filename: effectiveFilename,
           includeNormals,
           includeColors,
+          animations: currentSceneModel.animations,
         });
       } else {
         if (!uploadedFile) {

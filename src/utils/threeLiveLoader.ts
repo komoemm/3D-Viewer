@@ -288,17 +288,23 @@ export function extractThreeLiveScript(input: string): string {
   return input.trim();
 }
 
+export const THREE_LIVE_EXECUTION_TIMEOUT_MS = 3000;
+export const THREE_LIVE_MAX_VERTICES = 500000;
+export const THREE_LIVE_MAX_MESHES = 3000;
+
 /**
  * Executes Three-Live JavaScript/TypeScript code in a sandboxed context:
  * - Runs with new Function('THREE', 'scene', transpiledCode)
  * - Prohibits forbidden network and DOM access (fetch, XMLHttpRequest, WebSocket, import(), eval, window., document., localStorage)
  * - Collects all Mesh / Group children into a new THREE.Group (ignoring Lights and Cameras)
  * - Captures scene.userData.animate or top-level function animate(t)
+ * - Enforces 3-second safety execution timeout and mesh/vertex quota limits
  */
 export async function executeThreeLiveScript(
   inputCode: string,
   filename: string = 'three-live-code.html'
 ): Promise<{ object: THREE.Group; animate?: (t: number) => void }> {
+  const startTime = performance.now();
   const rawCode = extractThreeLiveScript(inputCode);
 
   if (!rawCode.trim()) {
@@ -327,71 +333,223 @@ export async function executeThreeLiveScript(
     }
   }
 
-  // Transpile TypeScript syntax if present using Sucrase
-  const { transform } = await import('sucrase');
-  let transpiledCode: string;
-  try {
-    transpiledCode = transform(rawCode, { transforms: ['typescript'] }).code;
-  } catch (err: any) {
-    const loc = err?.loc ? ` at line ${err.loc.line}, column ${err.loc.column}` : '';
-    throw new Error(
-      `Three-Live error in "${filename}": Syntax error${loc} - ${err?.message || err}`
-    );
-  }
+  // Enforce 3-second safety execution timeout during code transpilation & execution
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new Error(
+          `Three-Live error in "${filename}": Execution timed out. Exceeded 3-second safety limit.`
+        )
+      );
+    }, THREE_LIVE_EXECUTION_TIMEOUT_MS);
+    // Allow process to exit cleanly if in node
+    if (typeof (timer as any).unref === 'function') {
+      (timer as any).unref();
+    }
+  });
 
-  // Inject trailing capture check for top-level function animate(t) if present
-  const wrappedCode = `
-    ${transpiledCode}
+  const executionPromise = (async () => {
+    // Transpile TypeScript syntax if present using Sucrase
+    const { transform } = await import('sucrase');
+    let transpiledCode: string;
     try {
-      if (typeof animate === 'function') {
-        if (!scene.userData) scene.userData = {};
-        if (!scene.userData.animate) {
-          scene.userData.animate = animate;
+      transpiledCode = transform(rawCode, { transforms: ['typescript'] }).code;
+    } catch (err: any) {
+      const loc = err?.loc ? ` at line ${err.loc.line}, column ${err.loc.column}` : '';
+      throw new Error(
+        `Three-Live error in "${filename}": Syntax error${loc} - ${err?.message || err}`
+      );
+    }
+
+    if (performance.now() - startTime > THREE_LIVE_EXECUTION_TIMEOUT_MS) {
+      throw new Error(
+        `Three-Live error in "${filename}": Execution timed out. Exceeded 3-second safety limit.`
+      );
+    }
+
+    // Inject trailing capture check for top-level function animate(t) if present
+    const wrappedCode = `
+      ${transpiledCode}
+      try {
+        if (typeof animate === 'function') {
+          if (!scene.userData) scene.userData = {};
+          if (!scene.userData.animate) {
+            scene.userData.animate = animate;
+          }
+        }
+      } catch (_) {}
+    `;
+
+    const scene = new THREE.Scene();
+
+    try {
+      const runFn = new Function('THREE', 'scene', wrappedCode);
+      runFn(THREE, scene);
+    } catch (err: any) {
+      let lineInfo = '';
+      if (err?.stack) {
+        const match = err.stack.match(/<anonymous>:(\d+):(\d+)/) || err.stack.match(/Function:(\d+):(\d+)/);
+        if (match) {
+          const line = Math.max(1, parseInt(match[1], 10) - 1);
+          lineInfo = ` at line ${line}`;
         }
       }
-    } catch (_) {}
-  `;
+      throw new Error(`Three-Live error in "${filename}": ${err?.message || err}${lineInfo}`);
+    }
 
-  const scene = new THREE.Scene();
+    if (performance.now() - startTime > THREE_LIVE_EXECUTION_TIMEOUT_MS) {
+      throw new Error(
+        `Three-Live error in "${filename}": Execution timed out. Exceeded 3-second safety limit.`
+      );
+    }
 
-  try {
-    const runFn = new Function('THREE', 'scene', wrappedCode);
-    runFn(THREE, scene);
-  } catch (err: any) {
-    let lineInfo = '';
-    if (err?.stack) {
-      const match = err.stack.match(/<anonymous>:(\d+):(\d+)/) || err.stack.match(/Function:(\d+):(\d+)/);
-      if (match) {
-        const line = Math.max(1, parseInt(match[1], 10) - 1);
-        lineInfo = ` at line ${line}`;
+    // Collect all Mesh / Group children from scene into a new THREE.Group
+    // Ignore Lights and Cameras added by the script (viewer has its own studio lighting)
+    const rootGroup = new THREE.Group();
+    rootGroup.name = filename.replace(/\.[^/.]+$/, '') || 'Three-Live Model';
+
+    const sceneChildren = [...scene.children];
+    for (const child of sceneChildren) {
+      if (child instanceof THREE.Light || child instanceof THREE.Camera) {
+        continue;
       }
+      rootGroup.add(child);
     }
-    throw new Error(`Three-Live error in "${filename}": ${err?.message || err}${lineInfo}`);
-  }
 
-  // Collect all Mesh / Group children from scene into a new THREE.Group
-  // Ignore Lights and Cameras added by the script (viewer has its own studio lighting)
-  const rootGroup = new THREE.Group();
-  rootGroup.name = filename.replace(/\.[^/.]+$/, '') || 'Three-Live Model';
-
-  const sceneChildren = [...scene.children];
-  for (const child of sceneChildren) {
-    if (child instanceof THREE.Light || child instanceof THREE.Camera) {
-      continue;
+    if (rootGroup.children.length === 0) {
+      throw new Error(
+        `Three-Live error in "${filename}": No 3D objects were added to the scene. Make sure your script calls "scene.add(object)" to add meshes or groups.`
+      );
     }
-    rootGroup.add(child);
+
+    // Mesh and vertex safety quota checks
+    let totalMeshes = 0;
+    let totalVertices = 0;
+
+    rootGroup.traverse((child) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.Points || child instanceof THREE.Line) {
+        totalMeshes++;
+        const geom = child.geometry;
+        if (geom && geom.attributes && geom.attributes.position) {
+          totalVertices += geom.attributes.position.count;
+        }
+      }
+    });
+
+    if (totalMeshes > THREE_LIVE_MAX_MESHES) {
+      throw new Error(
+        `Three-Live error in "${filename}": Mesh quota exceeded. Limit is ${THREE_LIVE_MAX_MESHES.toLocaleString()} meshes (found ${totalMeshes.toLocaleString()}).`
+      );
+    }
+
+    if (totalVertices > THREE_LIVE_MAX_VERTICES) {
+      throw new Error(
+        `Three-Live error in "${filename}": Vertex quota exceeded. Limit is ${THREE_LIVE_MAX_VERTICES.toLocaleString()} vertices (found ${totalVertices.toLocaleString()}).`
+      );
+    }
+
+    let animateFn: ((t: number) => void) | undefined = undefined;
+    if (typeof scene.userData?.animate === 'function') {
+      animateFn = scene.userData.animate;
+    }
+
+    return { object: rootGroup, animate: animateFn };
+  })();
+
+  return Promise.race([executionPromise, timeoutPromise]);
+}
+
+/**
+ * Bakes a Three-Live animate(t) function into a THREE.AnimationClip by sampling
+ * animate(t) at 30fps for 2 seconds (recording position/quaternion of root group and moving children).
+ * Sets target names compatible with GLTFExporter (.position / .quaternion for root, ${child.name}.position for children).
+ * Restores original object transforms at t=0 when baking is complete.
+ */
+export function bakeThreeLiveAnimation(
+  rootObject: THREE.Object3D,
+  animate: (t: number) => void,
+  duration = 2.0,
+  fps = 30
+): THREE.AnimationClip {
+  const totalFrames = Math.round(duration * fps);
+  const times = new Float32Array(totalFrames + 1);
+  for (let i = 0; i <= totalFrames; i++) {
+    times[i] = i / fps;
   }
 
-  if (rootGroup.children.length === 0) {
-    throw new Error(
-      `Three-Live error in "${filename}": No 3D objects were added to the scene. Make sure your script calls "scene.add(object)" to add meshes or groups.`
-    );
+  // Find all objects to observe: root + descendants
+  const candidateObjects: THREE.Object3D[] = [rootObject];
+  rootObject.traverse((obj) => {
+    if (obj !== rootObject) {
+      candidateObjects.push(obj);
+    }
+  });
+
+  // Assign fallback names if missing
+  candidateObjects.forEach((obj, idx) => {
+    if (!obj.name) {
+      obj.name = obj === rootObject ? 'RootModel' : `Node_${idx}`;
+    }
+  });
+
+  const positions = new Map<THREE.Object3D, Float32Array>();
+  const quaternions = new Map<THREE.Object3D, Float32Array>();
+
+  candidateObjects.forEach((obj) => {
+    positions.set(obj, new Float32Array((totalFrames + 1) * 3));
+    quaternions.set(obj, new Float32Array((totalFrames + 1) * 4));
+  });
+
+  for (let i = 0; i <= totalFrames; i++) {
+    const t = times[i];
+    try {
+      animate(t);
+    } catch (_) {}
+    rootObject.updateMatrixWorld(true);
+
+    candidateObjects.forEach((obj) => {
+      const posArr = positions.get(obj)!;
+      posArr[i * 3 + 0] = obj.position.x;
+      posArr[i * 3 + 1] = obj.position.y;
+      posArr[i * 3 + 2] = obj.position.z;
+
+      const quatArr = quaternions.get(obj)!;
+      quatArr[i * 4 + 0] = obj.quaternion.x;
+      quatArr[i * 4 + 1] = obj.quaternion.y;
+      quatArr[i * 4 + 2] = obj.quaternion.z;
+      quatArr[i * 4 + 3] = obj.quaternion.w;
+    });
   }
 
-  let animateFn: ((t: number) => void) | undefined = undefined;
-  if (typeof scene.userData?.animate === 'function') {
-    animateFn = scene.userData.animate;
-  }
+  // Restore t=0 state
+  try {
+    animate(0);
+  } catch (_) {}
+  rootObject.updateMatrixWorld(true);
 
-  return { object: rootGroup, animate: animateFn };
+  const tracks: THREE.KeyframeTrack[] = [];
+
+  const hasVariation = (arr: Float32Array, stride: number): boolean => {
+    for (let i = stride; i < arr.length; i++) {
+      if (Math.abs(arr[i] - arr[i % stride]) > 0.0001) return true;
+    }
+    return false;
+  };
+
+  candidateObjects.forEach((obj) => {
+    const posArr = positions.get(obj)!;
+    const quatArr = quaternions.get(obj)!;
+
+    const posChanged = hasVariation(posArr, 3);
+    const quatChanged = hasVariation(quatArr, 4);
+
+    // Root group tracks must start with '.' for Three.js property binding
+    if (obj === rootObject || posChanged || quatChanged) {
+      const targetPrefix = obj === rootObject ? '.' : `${obj.name}.`;
+      tracks.push(new THREE.VectorKeyframeTrack(`${targetPrefix}position`, times as any, posArr as any));
+      tracks.push(new THREE.QuaternionKeyframeTrack(`${targetPrefix}quaternion`, times as any, quatArr as any));
+    }
+  });
+
+  return new THREE.AnimationClip('ThreeLiveAnimation', duration, tracks);
 }

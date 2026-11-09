@@ -42,7 +42,7 @@ import {
   normalizeModelPosition,
   calculateModelStats,
 } from './utils/modelLoaders';
-import { executeThreeLiveScript } from './utils/threeLiveLoader';
+import { executeThreeLiveScript, bakeThreeLiveAnimation } from './utils/threeLiveLoader';
 
 export default function App() {
   const viewportRef = useRef<ViewportHandle>(null);
@@ -99,9 +99,7 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   // Three-Live Animation State
-  const threeLiveAnimateRef = useRef<((t: number) => void) | null>(null);
   const [isThreeLivePlaying, setIsThreeLivePlaying] = useState<boolean>(true);
-  const [hasThreeLiveAnimate, setHasThreeLiveAnimate] = useState<boolean>(false);
 
   // Toast Helper
   const addToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
@@ -262,8 +260,6 @@ export default function App() {
       } else {
         setSelectedModelId(null);
       }
-      threeLiveAnimateRef.current = null;
-      setHasThreeLiveAnimate(false);
     }
     addToast('Model removed from scene and disposed', 'info');
   };
@@ -277,8 +273,6 @@ export default function App() {
     setModels([]);
     setSelectedModelId(null);
     setIsAnimPlaying(false);
-    threeLiveAnimateRef.current = null;
-    setHasThreeLiveAnimate(false);
     addToast('All models cleared and memory freed', 'info');
   };
 
@@ -295,6 +289,17 @@ export default function App() {
       normalizeModelPosition(object, models);
       const stats = calculateModelStats(object);
 
+      let animations: THREE.AnimationClip[] = [];
+      if (animate) {
+        try {
+          const clip = bakeThreeLiveAnimation(object, animate);
+          animations = [clip];
+          (object as any).animations = [clip];
+        } catch (bakeErr) {
+          console.warn('Failed to bake Three-Live animation clip:', bakeErr);
+        }
+      }
+
       const modelId = `model_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const newModel: LoadedModel = {
         id: modelId,
@@ -302,17 +307,13 @@ export default function App() {
         object,
         visible: true,
         stats,
-        animations: [],
+        animations,
         isScript: true,
+        animate,
       };
 
       if (animate) {
-        threeLiveAnimateRef.current = animate;
-        setHasThreeLiveAnimate(true);
         setIsThreeLivePlaying(true);
-      } else {
-        threeLiveAnimateRef.current = null;
-        setHasThreeLiveAnimate(false);
       }
 
       setModels((prev) => [...prev, newModel]);
@@ -500,6 +501,8 @@ export default function App() {
 
   const selectedModel = models.find((m) => m.id === selectedModelId);
   const activeAnimations = selectedModel?.animations || [];
+  const hasThreeLiveAnimate = !!selectedModel?.animate;
+  const hasAnyThreeLiveAnimate = models.some((m) => m.visible && !!m.animate);
 
   return (
     <div className="relative w-screen h-screen bg-slate-950 text-slate-100 overflow-hidden select-none">
@@ -526,7 +529,7 @@ export default function App() {
           isAnimPlaying={isAnimPlaying}
           animSpeed={animSpeed}
           isOrthographic={isOrthographic}
-          threeLiveAnimate={threeLiveAnimateRef.current}
+          threeLiveAnimate={selectedModel?.animate || null}
           isThreeLivePlaying={isThreeLivePlaying}
           onSelectModel={handleSelectModel}
           onTransformChange={handleTransformGizmoChange}
@@ -608,7 +611,7 @@ export default function App() {
       )}
 
       {/* Floating Three-Live Play/Pause Mini Pill (when no model is actively selected) */}
-      {models.length > 0 && !selectedModelId && hasThreeLiveAnimate && (
+      {models.length > 0 && !selectedModelId && hasAnyThreeLiveAnimate && (
         <aside
           aria-label="Three-Live animation control"
           className="absolute top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-auto select-none animate-in fade-in slide-in-from-top-2 duration-150"

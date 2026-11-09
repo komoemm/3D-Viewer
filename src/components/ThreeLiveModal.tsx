@@ -232,7 +232,13 @@ export const ThreeLiveModal: React.FC<ThreeLiveModalProps> = ({
                 <span>Three-Live Script / HTML Code</span>
                 <span className="text-[11px] font-mono text-slate-500">({filename})</span>
               </label>
-              <span className="text-[11px] font-mono text-slate-500">{code.length} chars</span>
+              <div className="flex items-center gap-2.5">
+                <span className="text-[11px] text-amber-400/90 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-amber-400" aria-hidden="true" />
+                  <span>Only paste code you trust.</span>
+                </span>
+                <span className="text-[11px] font-mono text-slate-500">{code.length} chars</span>
+              </div>
             </div>
 
             <textarea

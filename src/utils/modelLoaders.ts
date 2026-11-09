@@ -8,6 +8,7 @@ import type { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { decodeSPZ } from './spzDecoder';
 import { globalDecoderWorkerPool } from './decoderWorkerPool';
 import { LoadedModel, ModelStats } from '../types';
+import { executeThreeLiveScript, bakeThreeLiveAnimation } from './threeLiveLoader';
 
 /**
  * Lazy-loaded Three.js Loader singletons (code-split dynamic chunks).
@@ -588,6 +589,7 @@ export async function loadModelFile(
 
     let object: THREE.Object3D | null = null;
     let animations: THREE.AnimationClip[] = [];
+    let liveAnimate: ((t: number) => void) | undefined = undefined;
 
     try {
       if (ext === 'glb' || ext === 'gltf') {
@@ -771,9 +773,25 @@ export async function loadModelFile(
         if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
         object = await executeThreeScript(code, filename);
         if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
+      } else if (ext === 'html') {
+        if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
+        const code = await file.text();
+        if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
+        const liveResult = await executeThreeLiveScript(code, filename);
+        object = liveResult.object;
+        liveAnimate = liveResult.animate;
+        if (liveAnimate) {
+          try {
+            const clip = bakeThreeLiveAnimation(object, liveAnimate);
+            animations = [clip];
+            (object as any).animations = [clip];
+          } catch (bakeErr) {
+            console.warn('Failed to bake Three-Live animation:', bakeErr);
+          }
+        }
       } else {
         throw new Error(
-          `Unsupported file format: .${ext}. Supported formats are .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .ts, .js`
+          `Unsupported file format: .${ext}. Supported formats are .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .ts, .js, .html`
         );
       }
 
@@ -796,6 +814,8 @@ export async function loadModelFile(
         visible: true,
         stats,
         animations,
+        isScript: ext === 'ts' || ext === 'js' || ext === 'html',
+        animate: liveAnimate,
       };
     } finally {
       URL.revokeObjectURL(url);

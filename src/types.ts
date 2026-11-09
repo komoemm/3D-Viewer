@@ -17,6 +17,7 @@ export interface LoadedModel {
   stats: ModelStats;
   animations: THREE.AnimationClip[];
   isScript?: boolean;
+  animate?: (t: number) => void;
 }
 
 export interface TransformValues {
@@ -54,7 +55,8 @@ export type SupportedFileFormat =
   | 'stl'
   | 'ifc'
   | 'ts'
-  | 'js';
+  | 'js'
+  | 'html';
 
 export const SUPPORTED_FILE_EXTENSIONS: readonly SupportedFileFormat[] = [
   'glb',
@@ -67,6 +69,7 @@ export const SUPPORTED_FILE_EXTENSIONS: readonly SupportedFileFormat[] = [
   'ifc',
   'ts',
   'js',
+  'html',
 ] as const;
 
-export const ACCEPTED_FILE_EXTENSIONS = '.glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ifc,.ts,.js,text/javascript,application/javascript,application/typescript';
+export const ACCEPTED_FILE_EXTENSIONS = '.glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ifc,.ts,.js,.html,text/html,text/javascript,application/javascript,application/typescript';

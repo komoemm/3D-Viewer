@@ -560,9 +560,18 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
 
         const isAutoRotating = propsRef.current.autoRotate && propsRef.current.models.length > 0;
         const isPlayingAnim = propsRef.current.isAnimPlaying && !!mixer;
+
+        // Per-model animation: execute only the currently selected model's animate function
+        const selectedModel = propsRef.current.models.find(
+          (m) => m.id === propsRef.current.selectedModelId
+        );
+        const activeThreeLiveAnimate =
+          (selectedModel && selectedModel.visible ? selectedModel.animate : undefined) ||
+          propsRef.current.threeLiveAnimate ||
+          undefined;
+
         const isThreeLiveActive = !!(
-          propsRef.current.isThreeLivePlaying &&
-          propsRef.current.threeLiveAnimate
+          propsRef.current.isThreeLivePlaying && activeThreeLiveAnimate
         );
         const isLerping = !!targetCameraPos.current || !!targetControlsTarget.current;
         const isInteracting =
@@ -631,11 +640,11 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
             mixer.update(delta);
           }
 
-          // Update Three-Live script animation if active
-          if (isThreeLiveActive && propsRef.current.threeLiveAnimate) {
+          // Update Three-Live script animation if active (only for selected model)
+          if (isThreeLiveActive && activeThreeLiveAnimate) {
             const elapsed = clock.getElapsedTime();
             try {
-              propsRef.current.threeLiveAnimate(elapsed);
+              activeThreeLiveAnimate(elapsed);
             } catch (threeLiveErr) {
               console.error('Three-Live animation error:', threeLiveErr);
             }

@@ -93,6 +93,7 @@ export const ConverterBar: React.FC<ConverterBarProps> = ({
       const result = await convertObject3D(activeModel.object, targetFormat, {
         filename: `${baseName}.${targetFormat}`,
         binary: true,
+        animations: activeModel.animations,
       });
 
       setConversionProgress(100);

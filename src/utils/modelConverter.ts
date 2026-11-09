@@ -3,7 +3,7 @@ import { LoadedModel } from '../types';
 import { loadModelFile, disposeSceneHierarchy, disposeLoadedModel, loadIFCModel } from './modelLoaders';
 
 export type TargetFormat = 'glb' | 'usdz' | 'ply' | 'obj' | 'stl';
-export type InputFormat = 'glb' | 'gltf' | 'obj' | 'ply' | 'stl' | 'fbx' | 'spz' | 'ifc' | 'ts' | 'js' | 'unknown';
+export type InputFormat = 'glb' | 'gltf' | 'obj' | 'ply' | 'stl' | 'fbx' | 'spz' | 'ifc' | 'ts' | 'js' | 'html' | 'unknown';
 
 export interface ConversionOptions {
   binary?: boolean;
@@ -12,6 +12,7 @@ export interface ConversionOptions {
   includeNormals?: boolean;
   includeColors?: boolean;
   includeUVs?: boolean;
+  animations?: THREE.AnimationClip[];
   onProgress?: (step: string, percent: number) => void;
 }
 
@@ -133,7 +134,7 @@ export function detectFormatFromFilename(name: string): InputFormat {
   if (!name) return 'unknown';
   const clean = name.toLowerCase().split('?')[0].split('#')[0];
   const ext = clean.split('.').pop() || '';
-  if (['glb', 'gltf', 'obj', 'ply', 'stl', 'fbx', 'spz', 'ifc', 'ts', 'js'].includes(ext)) {
+  if (['glb', 'gltf', 'obj', 'ply', 'stl', 'fbx', 'spz', 'ifc', 'ts', 'js', 'html'].includes(ext)) {
     return ext as InputFormat;
   }
   return 'unknown';
@@ -267,10 +268,17 @@ export async function convertObject3D(
       const exporter = new GLTFExporter();
       isBinary = true;
       mimeType = 'model/gltf-binary';
+      const anims =
+        options.animations && options.animations.length > 0
+          ? options.animations
+          : exportObject.animations && exportObject.animations.length > 0
+          ? exportObject.animations
+          : undefined;
       const glbOutput = await exporter.parseAsync(exportObject, {
         binary: true,
         embedImages: true,
         onlyVisible: true,
+        animations: anims,
       });
       if (glbOutput instanceof ArrayBuffer) {
         exportData = glbOutput;
@@ -722,6 +730,7 @@ export async function convertUploadedFile(
     const baseName = options.filename || file.name.replace(/\.[^/.]+$/, '');
     const result = await convertObject3D(loadedModel.object, targetFormat, {
       ...options,
+      animations: options.animations || loadedModel.animations,
       filename: baseName,
     });
 
