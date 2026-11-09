@@ -550,7 +550,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
                   </div>
                   <div>
                     <div className="text-xs font-semibold text-white">Click or drag a 3D model file here</div>
-                    <div className="text-[11px] text-slate-400">Supports .GLB, .GLTF, .OBJ, .PLY, .STL, .IFC, .FBX, .SPZ</div>
+                    <div className="text-[11px] text-slate-400">Supports .GLB, .GLTF, .OBJ, .PLY, .STL, .IFC, .HTML (Three-Live), .FBX, .SPZ</div>
                   </div>
                 </>
               )}

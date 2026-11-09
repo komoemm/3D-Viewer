@@ -780,15 +780,6 @@ export async function loadModelFile(
         const liveResult = await executeThreeLiveScript(code, filename);
         object = liveResult.object;
         liveAnimate = liveResult.animate;
-        if (liveAnimate) {
-          try {
-            const clip = bakeThreeLiveAnimation(object, liveAnimate);
-            animations = [clip];
-            (object as any).animations = [clip];
-          } catch (bakeErr) {
-            console.warn('Failed to bake Three-Live animation:', bakeErr);
-          }
-        }
       } else {
         throw new Error(
           `Unsupported file format: .${ext}. Supported formats are .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .ts, .js, .html`
@@ -804,6 +795,16 @@ export async function loadModelFile(
       optimizeMeshHierarchy(object);
       normalizeModelPosition(object, existingModels);
       const stats = calculateModelStats(object);
+
+      if (liveAnimate) {
+        try {
+          const clip = bakeThreeLiveAnimation(object, liveAnimate);
+          animations = [clip];
+          (object as any).animations = [clip];
+        } catch (bakeErr) {
+          console.warn('Failed to bake Three-Live animation:', bakeErr);
+        }
+      }
 
       const modelId = `model_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 

@@ -282,8 +282,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                         setOpenMenu(null);
                         fileInputRef.current?.click();
                       }}
-                      aria-label="Open 3D files from local computer"
-                      title="Open 3D files (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc, .ts, .js)"
+                      aria-label="Open 3D files from local computer (.glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .html, .ts, .js)"
+                      title="Open 3D files (.glb, .gltf, .obj, .fbx, .stl, .ply, .spz, .ifc, .html, .ts, .js)"
                       className="px-3 py-1.5 rounded-lg bg-[#ea7600] text-white text-xs font-semibold hover:bg-[#d96d00] transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 flex items-center gap-1.5 shadow-md shadow-[#ea7600]/25"
                     >
                       <Upload className="w-3.5 h-3.5" aria-hidden="true" />
@@ -863,8 +863,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           type="button"
           role="button"
           onClick={() => fileInputRef.current?.click()}
-          aria-label="Open 3D files from local computer (.glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .ts, .js)"
-          title="Open .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc files"
+          aria-label="Open 3D files from local computer (.glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .html, .ts, .js)"
+          title="Open .glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .html (Three-Live), .ts, .js files"
           className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-[#ea7600] hover:bg-[#d96d00] shadow-md shadow-[#ea7600]/25 flex items-center gap-1.5 transition active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
         >
           <Upload className="w-3.5 h-3.5" aria-hidden="true" />

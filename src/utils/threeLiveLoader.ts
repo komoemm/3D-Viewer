@@ -248,10 +248,10 @@ export const SAMURAI_THREE_LIVE_EXAMPLE = `<three-live allow-client-scripts came
 
     scene.add(samurai);
 
-    // 11. Three-Live Animation Hook: bobs the samurai and turns it slowly
+    // 11. Three-Live Animation Hook: seamless looping bob and sway (identical at t=0 and t=2)
     scene.userData.animate = (t) => {
-      samurai.position.y = 0.25 + Math.sin(t * 2.5) * 0.05;
-      samurai.rotation.y = t * 0.4;
+      samurai.position.y = 0.25 + Math.sin(t * Math.PI) * 0.05;
+      samurai.rotation.y = Math.sin(t * Math.PI) * 0.4;
     };
   </script>
 </three-live>`;
@@ -464,6 +464,8 @@ export async function executeThreeLiveScript(
  * animate(t) at 30fps for 2 seconds (recording position/quaternion of root group and moving children).
  * Sets target names compatible with GLTFExporter (.position / .quaternion for root, ${child.name}.position for children).
  * Restores original object transforms at t=0 when baking is complete.
+ *
+ * NOTE: The baked clip only loops seamlessly if animate(0) equals animate(duration).
  */
 export function bakeThreeLiveAnimation(
   rootObject: THREE.Object3D,
@@ -471,6 +473,7 @@ export function bakeThreeLiveAnimation(
   duration = 2.0,
   fps = 30
 ): THREE.AnimationClip {
+  // Note: The clip only loops seamlessly if animate(0) equals animate(duration).
   const totalFrames = Math.round(duration * fps);
   const times = new Float32Array(totalFrames + 1);
   for (let i = 0; i <= totalFrames; i++) {

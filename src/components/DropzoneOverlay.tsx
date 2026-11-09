@@ -99,7 +99,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
             <div className="space-y-1.5">
               <h2 className="text-lg sm:text-xl font-bold text-white">No 3D Model Loaded</h2>
               <p className="text-slate-300 text-xs leading-relaxed max-w-sm mx-auto">
-                Drag and drop 3D files or Three.js (.ts / .js) scripts anywhere on screen, or choose an import option below.
+                Drag and drop 3D files or Three-Live (.html) / Three.js (.ts / .js) scripts anywhere on screen, or choose an import option below.
               </p>
             </div>
 
@@ -108,8 +108,8 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
                 type="button"
                 role="button"
                 onClick={onOpenFileInput}
-                aria-label="Select 3D files from your computer to inspect"
-                title="Select 3D files (.glb, .gltf, .fbx, .obj, .stl, .ply, .spz, .ifc)"
+                aria-label="Select 3D files from your computer to inspect (.glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .html, .ts, .js)"
+                title="Select 3D files (.glb, .gltf, .fbx, .obj, .stl, .ply, .spz, .ifc, .html, .ts, .js)"
                 className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
               >
                 <FileCode2 className="w-4 h-4" aria-hidden="true" />
@@ -184,6 +184,8 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
               <span className="text-purple-300 font-medium">STL</span>
               <span className="text-slate-500" aria-hidden="true">•</span>
               <span className="text-teal-300 font-medium">IFC</span>
+              <span className="text-slate-500" aria-hidden="true">•</span>
+              <span className="text-blue-300 font-bold">.HTML (Three-Live)</span>
               <span className="text-slate-500" aria-hidden="true">•</span>
               <span className="text-amber-300 font-bold">.TS</span>
               <span className="text-slate-500" aria-hidden="true">•</span>
