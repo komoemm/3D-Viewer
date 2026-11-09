@@ -1,6 +1,6 @@
 import React from 'react';
 import { UploadCloud, FileCode2, Box, Code2, ArrowRightLeft, ExternalLink } from 'lucide-react';
-import { ACCEPTED_FILE_EXTENSIONS } from '../types';
+import { ACCEPTED_FILE_EXTENSIONS, SUPPORTED_FORMATS_LABEL, SUPPORTED_FORMATS_LIST } from '../types';
 
 interface DropzoneOverlayProps {
   isDragging: boolean;
@@ -47,22 +47,10 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
           Drop 3D Models or Three.js Scripts Here
         </h2>
         <p className="text-slate-300 text-xs sm:text-sm mb-4 text-center max-w-lg px-4">
-          Compatible with .GLB, .GLTF, .FBX, .PLY, .SPZ, .OBJ, .STL, .IFC (BIM), .TS/.JS scripts, and Three-Live (.HTML)
+          Compatible with {SUPPORTED_FORMATS_LABEL}
         </p>
         <div className="flex flex-wrap gap-2 justify-center max-w-xl px-4" role="list" aria-label="Supported file formats">
-          {[
-            '.GLB',
-            '.GLTF',
-            '.FBX',
-            '.PLY',
-            '.SPZ (Gaussian)',
-            '.OBJ',
-            '.STL',
-            '.IFC (BIM)',
-            '.HTML (Three-Live)',
-            '.TS (Three.js)',
-            '.JS (Three.js)',
-          ].map((fmt) => (
+          {SUPPORTED_FORMATS_LIST.map((fmt) => (
             <span
               key={fmt}
               role="listitem"
@@ -81,6 +69,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
           ))}
         </div>
       </div>
+
 
       {/* Empty State Banner (shown when 0 models in scene) */}
       {modelCount === 0 && !isDragging && (
@@ -108,8 +97,8 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
                 type="button"
                 role="button"
                 onClick={onOpenFileInput}
-                aria-label="Select 3D files from your computer to inspect (.glb, .gltf, .fbx, .ply, .spz, .obj, .stl, .ifc, .html, .ts, .js)"
-                title="Select 3D files (.glb, .gltf, .fbx, .obj, .stl, .ply, .spz, .ifc, .html, .ts, .js)"
+                aria-label={`Select 3D files from your computer (${SUPPORTED_FORMATS_LABEL})`}
+                title={`Select 3D files (${SUPPORTED_FORMATS_LABEL})`}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
               >
                 <FileCode2 className="w-4 h-4" aria-hidden="true" />
@@ -169,28 +158,9 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
 
             <div className="pt-2 text-[10px] text-slate-300 font-mono flex items-center justify-center gap-1.5 flex-wrap" aria-label="Supported file types list">
               <span className="text-slate-400">Supports:</span>
-              <span className="text-blue-300 font-medium">GLB</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-blue-300 font-medium">GLTF</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-indigo-300 font-medium">FBX</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-emerald-300 font-medium">PLY</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-amber-300 font-medium">SPZ</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-cyan-300 font-medium">OBJ</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-purple-300 font-medium">STL</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-teal-300 font-medium">IFC</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-blue-300 font-bold">.HTML (Three-Live)</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-amber-300 font-bold">.TS</span>
-              <span className="text-slate-500" aria-hidden="true">•</span>
-              <span className="text-amber-300 font-bold">.JS</span>
+              <span className="text-slate-200 font-medium">{SUPPORTED_FORMATS_LABEL}</span>
             </div>
+
 
             {/* Small External Web Link */}
             <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">

@@ -31,6 +31,7 @@ const ThreeLiveModal = lazy(() =>
 );
 import {
   loadModelFile,
+  finalizeLoadedModel,
   createDemoModel,
   disposeLoadedModel,
   disposeLoadedModels,
@@ -42,7 +43,9 @@ import {
   normalizeModelPosition,
   calculateModelStats,
 } from './utils/modelLoaders';
-import { executeThreeLiveScript, bakeThreeLiveAnimation } from './utils/threeLiveLoader';
+
+import { executeThreeLiveScript } from './utils/threeLiveLoader';
+
 
 export default function App() {
   const viewportRef = useRef<ViewportHandle>(null);
@@ -285,38 +288,17 @@ export default function App() {
     try {
       const { object, animate } = await executeThreeLiveScript(code, filename);
 
-      optimizeMeshHierarchy(object);
-      normalizeModelPosition(object, models);
-      const stats = calculateModelStats(object);
-
-      let animations: THREE.AnimationClip[] = [];
-      if (animate) {
-        try {
-          const clip = bakeThreeLiveAnimation(object, animate);
-          animations = [clip];
-          (object as any).animations = [clip];
-        } catch (bakeErr) {
-          console.warn('Failed to bake Three-Live animation clip:', bakeErr);
-        }
-      }
-
-      const modelId = `model_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const newModel: LoadedModel = {
-        id: modelId,
-        name: filename || 'Three-Live Model',
-        object,
-        visible: true,
-        stats,
-        animations,
+      const newModel = finalizeLoadedModel(object, filename || 'Three-Live Model', models, {
         isScript: true,
-        animate,
-      };
+        liveAnimate: animate,
+      });
 
       if (animate) {
         setIsThreeLivePlaying(true);
       }
 
       setModels((prev) => [...prev, newModel]);
+
       setSelectedModelId(newModel.id);
       syncTransformStateWithModel(newModel);
       if (!gizmoMode) setGizmoMode('translate');

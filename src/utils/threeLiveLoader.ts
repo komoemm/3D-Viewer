@@ -10,9 +10,10 @@ export const TORUS_KNOT_THREE_LIVE_EXAMPLE = `<three-live allow-client-scripts c
       new THREE.MeshStandardMaterial({ color: 0x4285f4, metalness: 0.85, roughness: 0.15 })
     );
     scene.add(knot);
-    scene.userData.animate = (t) => { knot.rotation.y = t * (Math.PI / 2); };
+    scene.userData.animate = (t) => { knot.rotation.y = Math.sin(t * Math.PI) * 0.8; };
   </script>
 </three-live>`;
+
 
 /**
  * Built-in Samurai Avatar Three-Live example.
@@ -300,7 +301,9 @@ export const THREE_LIVE_MAX_MESHES = 3000;
  * - Captures scene.userData.animate or top-level function animate(t)
  * - Enforces 3-second safety execution timeout and mesh/vertex quota limits
  */
+// This is regex + new Function on the main thread, not a real Web Worker sandbox - only paste code you trust.
 export async function executeThreeLiveScript(
+
   inputCode: string,
   filename: string = 'three-live-code.html'
 ): Promise<{ object: THREE.Group; animate?: (t: number) => void }> {
@@ -473,13 +476,6 @@ export function bakeThreeLiveAnimation(
   duration = 2.0,
   fps = 30
 ): THREE.AnimationClip {
-  // Note: The clip only loops seamlessly if animate(0) equals animate(duration).
-  const totalFrames = Math.round(duration * fps);
-  const times = new Float32Array(totalFrames + 1);
-  for (let i = 0; i <= totalFrames; i++) {
-    times[i] = i / fps;
-  }
-
   // Find all objects to observe: root + descendants
   const candidateObjects: THREE.Object3D[] = [rootObject];
   rootObject.traverse((obj) => {
@@ -495,6 +491,46 @@ export function bakeThreeLiveAnimation(
     }
   });
 
+  // Seamless-loop check: sample at t=0 and t=duration, compare positions & quaternions
+  try {
+    animate(0);
+    rootObject.updateMatrixWorld(true);
+    const startTransforms = candidateObjects.map((obj) => ({
+      pos: obj.position.clone(),
+      quat: obj.quaternion.clone(),
+    }));
+
+    animate(duration);
+    rootObject.updateMatrixWorld(true);
+    let isSeamless = true;
+    for (let j = 0; j < candidateObjects.length; j++) {
+      const obj = candidateObjects[j];
+      const start = startTransforms[j];
+      if (
+        Math.abs(obj.position.x - start.pos.x) > 0.001 ||
+        Math.abs(obj.position.y - start.pos.y) > 0.001 ||
+        Math.abs(obj.position.z - start.pos.z) > 0.001 ||
+        Math.abs(obj.quaternion.x - start.quat.x) > 0.001 ||
+        Math.abs(obj.quaternion.y - start.quat.y) > 0.001 ||
+        Math.abs(obj.quaternion.z - start.quat.z) > 0.001 ||
+        Math.abs(obj.quaternion.w - start.quat.w) > 0.001
+      ) {
+        isSeamless = false;
+        break;
+      }
+    }
+    if (!isSeamless) {
+      console.warn('Animation is not seamless at 2s, loop will jump');
+    }
+  } catch (_) {}
+
+  // Total frames: duration * fps
+  const totalFrames = Math.round(duration * fps);
+  const times = new Float32Array(totalFrames + 1);
+  for (let i = 0; i <= totalFrames; i++) {
+    times[i] = i / fps;
+  }
+
   const positions = new Map<THREE.Object3D, Float32Array>();
   const quaternions = new Map<THREE.Object3D, Float32Array>();
 
@@ -503,7 +539,8 @@ export function bakeThreeLiveAnimation(
     quaternions.set(obj, new Float32Array((totalFrames + 1) * 4));
   });
 
-  for (let i = 0; i <= totalFrames; i++) {
+  // Sample frames 0 through totalFrames - 1
+  for (let i = 0; i < totalFrames; i++) {
     const t = times[i];
     try {
       animate(t);
@@ -523,6 +560,21 @@ export function bakeThreeLiveAnimation(
       quatArr[i * 4 + 3] = obj.quaternion.w;
     });
   }
+
+  // Make the last keyframe at t=duration (index totalFrames) explicitly equal to t=0
+  // to eliminate floating-point drift and guarantee a seamless loop boundary
+  candidateObjects.forEach((obj) => {
+    const posArr = positions.get(obj)!;
+    posArr[totalFrames * 3 + 0] = posArr[0];
+    posArr[totalFrames * 3 + 1] = posArr[1];
+    posArr[totalFrames * 3 + 2] = posArr[2];
+
+    const quatArr = quaternions.get(obj)!;
+    quatArr[totalFrames * 4 + 0] = quatArr[0];
+    quatArr[totalFrames * 4 + 1] = quatArr[1];
+    quatArr[totalFrames * 4 + 2] = quatArr[2];
+    quatArr[totalFrames * 4 + 3] = quatArr[3];
+  });
 
   // Restore t=0 state
   try {
@@ -546,13 +598,23 @@ export function bakeThreeLiveAnimation(
     const posChanged = hasVariation(posArr, 3);
     const quatChanged = hasVariation(quatArr, 4);
 
-    // Root group tracks must start with '.' for Three.js property binding
-    if (obj === rootObject || posChanged || quatChanged) {
-      const targetPrefix = obj === rootObject ? '.' : `${obj.name}.`;
+    const isRoot = obj === rootObject;
+    const targetPrefix = isRoot ? '.' : `${obj.name}.`;
+
+    // When baking, do NOT bake a root .position track that would move the normalized model:
+    // If animate() only moved children, posChanged for root is false, so no root .position track
+    // is added at all. This preserves the root's normalized placement and multi-model offset.
+    if (posChanged) {
       tracks.push(new THREE.VectorKeyframeTrack(`${targetPrefix}position`, times as any, posArr as any));
+    }
+
+    if (quatChanged) {
       tracks.push(new THREE.QuaternionKeyframeTrack(`${targetPrefix}quaternion`, times as any, quatArr as any));
     }
   });
 
-  return new THREE.AnimationClip('ThreeLiveAnimation', duration, tracks);
+  const clip = new THREE.AnimationClip('ThreeLiveAnimation', duration, tracks);
+  (clip as any).loop = THREE.LoopRepeat;
+  return clip;
 }
+

@@ -72,4 +72,22 @@ export const SUPPORTED_FILE_EXTENSIONS: readonly SupportedFileFormat[] = [
   'html',
 ] as const;
 
+export const SUPPORTED_FORMATS_LABEL =
+  '.GLB, .GLTF, .FBX, .PLY, .SPZ, .OBJ, .STL, .IFC, .TS, .JS, .HTML (Three-Live)';
+
+export const SUPPORTED_FORMATS_LIST = [
+  '.GLB',
+  '.GLTF',
+  '.FBX',
+  '.PLY',
+  '.SPZ',
+  '.OBJ',
+  '.STL',
+  '.IFC',
+  '.TS',
+  '.JS',
+  '.HTML (Three-Live)',
+] as const;
+
 export const ACCEPTED_FILE_EXTENSIONS = '.glb,.gltf,.fbx,.ply,.spz,.obj,.stl,.ifc,.ts,.js,.html,text/html,text/javascript,application/javascript,application/typescript';
+

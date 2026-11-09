@@ -558,10 +558,65 @@ export function normalizeModelPosition(object: THREE.Object3D, existingModels: L
   }
 }
 
+export interface FinalizeModelOptions {
+  isScript?: boolean;
+  liveAnimate?: (t: number) => void;
+  baseAnimations?: THREE.AnimationClip[];
+}
+
+/**
+ * Standard finalization pipeline for loaded 3D models across all formats:
+ * a) optimizeMeshHierarchy(object) - double-sided materials, normals, shadows
+ * b) normalizeModelPosition(object, existingModels) - auto-center, ground Y=0, offset if multi-model
+ * c) calculateModelStats(object) - mesh/triangle/vertex stats
+ * d) ONLY THEN bakeThreeLiveAnimation(object, liveAnimate) - samples animation into THREE.AnimationClip
+ */
+export function finalizeLoadedModel(
+  object: THREE.Object3D,
+  filename: string,
+  existingModels: LoadedModel[],
+  options?: FinalizeModelOptions
+): LoadedModel {
+  // a) Optimize mesh hierarchy
+  optimizeMeshHierarchy(object);
+
+  // b) Normalize position (center & align to ground Y=0)
+  normalizeModelPosition(object, existingModels);
+
+  // c) Calculate statistics
+  const stats = calculateModelStats(object);
+
+  // d) ONLY THEN bakeThreeLiveAnimation
+  let animations: THREE.AnimationClip[] = options?.baseAnimations ? [...options.baseAnimations] : [];
+  if (options?.liveAnimate) {
+    try {
+      const clip = bakeThreeLiveAnimation(object, options.liveAnimate);
+      animations = [clip];
+      (object as any).animations = [clip];
+    } catch (bakeErr) {
+      console.warn('Failed to bake Three-Live animation:', bakeErr);
+    }
+  }
+
+  const modelId = `model_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  return {
+    id: modelId,
+    name: filename,
+    object,
+    visible: true,
+    stats,
+    animations,
+    isScript: options?.isScript ?? false,
+    animate: options?.liveAnimate,
+  };
+}
+
 export interface LoadModelOptions {
   signal?: AbortSignal;
   onProgress?: (progress: number) => void;
 }
+
 
 /**
  * Loads a 3D model file and returns a LoadedModel object.
@@ -792,32 +847,12 @@ export async function loadModelFile(
         throw new Error(`Failed to parse 3D model geometry for ${filename}`);
       }
 
-      optimizeMeshHierarchy(object);
-      normalizeModelPosition(object, existingModels);
-      const stats = calculateModelStats(object);
-
-      if (liveAnimate) {
-        try {
-          const clip = bakeThreeLiveAnimation(object, liveAnimate);
-          animations = [clip];
-          (object as any).animations = [clip];
-        } catch (bakeErr) {
-          console.warn('Failed to bake Three-Live animation:', bakeErr);
-        }
-      }
-
-      const modelId = `model_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-      return {
-        id: modelId,
-        name: filename,
-        object,
-        visible: true,
-        stats,
-        animations,
+      return finalizeLoadedModel(object, filename, existingModels, {
         isScript: ext === 'ts' || ext === 'js' || ext === 'html',
-        animate: liveAnimate,
-      };
+        liveAnimate,
+        baseAnimations: animations,
+      });
+
     } finally {
       URL.revokeObjectURL(url);
     }
