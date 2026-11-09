@@ -39,6 +39,8 @@ interface Viewport3DProps {
   onFpsUpdate?: (fps: number) => void;
   onToast?: (message: string, type: 'info' | 'success' | 'error') => void;
   cameraQuaternionRef?: React.MutableRefObject<THREE.Quaternion>;
+  threeLiveAnimate?: ((t: number) => void) | null;
+  isThreeLivePlaying?: boolean;
 }
 
 export interface ViewportHandle {
@@ -79,6 +81,8 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       onFpsUpdate,
       onToast,
       cameraQuaternionRef,
+      threeLiveAnimate,
+      isThreeLivePlaying,
     },
     ref
   ) => {
@@ -147,6 +151,8 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
       onFpsUpdate,
       isAnimPlaying,
       onToast,
+      threeLiveAnimate,
+      isThreeLivePlaying,
     });
 
     useEffect(() => {
@@ -162,6 +168,8 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         onFpsUpdate,
         isAnimPlaying,
         onToast,
+        threeLiveAnimate,
+        isThreeLivePlaying,
       };
       requestRender();
     });
@@ -552,6 +560,10 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
 
         const isAutoRotating = propsRef.current.autoRotate && propsRef.current.models.length > 0;
         const isPlayingAnim = propsRef.current.isAnimPlaying && !!mixer;
+        const isThreeLiveActive = !!(
+          propsRef.current.isThreeLivePlaying &&
+          propsRef.current.threeLiveAnimate
+        );
         const isLerping = !!targetCameraPos.current || !!targetControlsTarget.current;
         const isInteracting =
           (controls as any)?.state !== -1 ||
@@ -568,6 +580,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         const shouldRender =
           isAutoRotating ||
           isPlayingAnim ||
+          isThreeLiveActive ||
           isLerping ||
           isInteracting ||
           controlsDampingActive ||
@@ -618,6 +631,16 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
             mixer.update(delta);
           }
 
+          // Update Three-Live script animation if active
+          if (isThreeLiveActive && propsRef.current.threeLiveAnimate) {
+            const elapsed = clock.getElapsedTime();
+            try {
+              propsRef.current.threeLiveAnimate(elapsed);
+            } catch (threeLiveErr) {
+              console.error('Three-Live animation error:', threeLiveErr);
+            }
+          }
+
           // Auto rotate logic
           if (isAutoRotating) {
             propsRef.current.models.forEach((m) => {
@@ -634,6 +657,7 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
         const continueNextFrame =
           isAutoRotating ||
           isPlayingAnim ||
+          isThreeLiveActive ||
           isLerping ||
           isInteracting ||
           controlsDampingActive ||
@@ -1123,6 +1147,13 @@ export const Viewport3D = React.forwardRef<ViewportHandle, Viewport3DProps>(
 
       requestRender();
     }, [activeAnimIndex, isAnimPlaying, animSpeed, selectedModelId, models, requestRender]);
+
+    // Wake render loop when Three-Live script animation starts playing
+    useEffect(() => {
+      if (isThreeLivePlaying && threeLiveAnimate) {
+        requestRender(5);
+      }
+    }, [isThreeLivePlaying, threeLiveAnimate, requestRender]);
 
     // Expose methods to parent via ref
     React.useImperativeHandle(ref, () => ({

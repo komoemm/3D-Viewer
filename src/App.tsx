@@ -17,7 +17,7 @@ import { Viewport3D, ViewportHandle } from './components/Viewport3D';
 import { DropzoneOverlay } from './components/DropzoneOverlay';
 import { ToastContainer } from './components/Toast';
 import { ConverterBar } from './components/ConverterBar';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Play, Pause } from 'lucide-react';
 
 // Code-split heavy modals to optimize initial Lighthouse TBT and LCP
 const ShortcutsModal = lazy(() =>
@@ -25,6 +25,9 @@ const ShortcutsModal = lazy(() =>
 );
 const ConverterModal = lazy(() =>
   import('./components/ConverterModal').then((m) => ({ default: m.ConverterModal }))
+);
+const ThreeLiveModal = lazy(() =>
+  import('./components/ThreeLiveModal').then((m) => ({ default: m.ThreeLiveModal }))
 );
 import {
   loadModelFile,
@@ -35,7 +38,11 @@ import {
   dispose3DObject,
   disposeSceneHierarchy,
   createSampleScriptFile,
+  optimizeMeshHierarchy,
+  normalizeModelPosition,
+  calculateModelStats,
 } from './utils/modelLoaders';
+import { executeThreeLiveScript } from './utils/threeLiveLoader';
 
 export default function App() {
   const viewportRef = useRef<ViewportHandle>(null);
@@ -87,8 +94,14 @@ export default function App() {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isConverterOpen, setIsConverterOpen] = useState<boolean>(false);
+  const [isThreeLiveOpen, setIsThreeLiveOpen] = useState<boolean>(false);
   const [isConverterBarVisible, setIsConverterBarVisible] = useState<boolean>(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Three-Live Animation State
+  const threeLiveAnimateRef = useRef<((t: number) => void) | null>(null);
+  const [isThreeLivePlaying, setIsThreeLivePlaying] = useState<boolean>(true);
+  const [hasThreeLiveAnimate, setHasThreeLiveAnimate] = useState<boolean>(false);
 
   // Toast Helper
   const addToast = useCallback((message: string, type: 'info' | 'success' | 'error' = 'info') => {
@@ -249,6 +262,8 @@ export default function App() {
       } else {
         setSelectedModelId(null);
       }
+      threeLiveAnimateRef.current = null;
+      setHasThreeLiveAnimate(false);
     }
     addToast('Model removed from scene and disposed', 'info');
   };
@@ -262,7 +277,67 @@ export default function App() {
     setModels([]);
     setSelectedModelId(null);
     setIsAnimPlaying(false);
+    threeLiveAnimateRef.current = null;
+    setHasThreeLiveAnimate(false);
     addToast('All models cleared and memory freed', 'info');
+  };
+
+  // Load and Validate Google Three-Live Code
+  const handleLoadThreeLiveCode = async (
+    code: string,
+    filename: string,
+    convertToGLBAfter = false
+  ): Promise<boolean> => {
+    try {
+      const { object, animate } = await executeThreeLiveScript(code, filename);
+
+      optimizeMeshHierarchy(object);
+      normalizeModelPosition(object, models);
+      const stats = calculateModelStats(object);
+
+      const modelId = `model_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const newModel: LoadedModel = {
+        id: modelId,
+        name: filename || 'Three-Live Model',
+        object,
+        visible: true,
+        stats,
+        animations: [],
+        isScript: true,
+      };
+
+      if (animate) {
+        threeLiveAnimateRef.current = animate;
+        setHasThreeLiveAnimate(true);
+        setIsThreeLivePlaying(true);
+      } else {
+        threeLiveAnimateRef.current = null;
+        setHasThreeLiveAnimate(false);
+      }
+
+      setModels((prev) => [...prev, newModel]);
+      setSelectedModelId(newModel.id);
+      syncTransformStateWithModel(newModel);
+      if (!gizmoMode) setGizmoMode('translate');
+
+      // Make sure Quick 3D Converter bar is visible
+      setIsConverterBarVisible(true);
+
+      setTimeout(() => {
+        viewportRef.current?.focusAll();
+      }, 100);
+
+      addToast(`Loaded Three-Live model: ${newModel.name}`, 'success');
+
+      if (convertToGLBAfter) {
+        setIsConverterOpen(true);
+      }
+
+      return true;
+    } catch (err: any) {
+      console.error(err);
+      throw err;
+    }
   };
 
   // Two-Way Transform Update from Inspector inputs
@@ -451,6 +526,8 @@ export default function App() {
           isAnimPlaying={isAnimPlaying}
           animSpeed={animSpeed}
           isOrthographic={isOrthographic}
+          threeLiveAnimate={threeLiveAnimateRef.current}
+          isThreeLivePlaying={isThreeLivePlaying}
           onSelectModel={handleSelectModel}
           onTransformChange={handleTransformGizmoChange}
           onFpsUpdate={setFps}
@@ -505,6 +582,7 @@ export default function App() {
         onStopAnim={() => setIsAnimPlaying(false)}
         onSetAnimSpeed={setAnimSpeed}
         onOpenConverter={() => setIsConverterOpen(true)}
+        onOpenThreeLive={() => setIsThreeLiveOpen(true)}
       />
 
       {/* 3. Floating Transform HUD (Top-Center) - Context-aware: only shown when a model/mesh is actively selected */}
@@ -523,7 +601,42 @@ export default function App() {
             setSelectedModelId(null);
           }}
           onOpenConverter={() => setIsConverterOpen(true)}
+          hasThreeLiveAnimate={hasThreeLiveAnimate}
+          isThreeLivePlaying={isThreeLivePlaying}
+          onToggleThreeLivePlay={() => setIsThreeLivePlaying((p) => !p)}
         />
+      )}
+
+      {/* Floating Three-Live Play/Pause Mini Pill (when no model is actively selected) */}
+      {models.length > 0 && !selectedModelId && hasThreeLiveAnimate && (
+        <aside
+          aria-label="Three-Live animation control"
+          className="absolute top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-auto select-none animate-in fade-in slide-in-from-top-2 duration-150"
+        >
+          <div className="backdrop-blur-md bg-neutral-900/90 px-3 py-1.5 rounded-full flex items-center gap-2.5 shadow-2xl border border-emerald-500/50">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+            <span className="text-xs font-semibold text-white">Three-Live Active</span>
+            <button
+              type="button"
+              onClick={() => setIsThreeLivePlaying((p) => !p)}
+              aria-label={isThreeLivePlaying ? 'Pause Three-Live Animation' : 'Play Three-Live Animation'}
+              title={isThreeLivePlaying ? 'Pause Animation' : 'Play Animation'}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-md shadow-emerald-600/30"
+            >
+              {isThreeLivePlaying ? (
+                <>
+                  <Pause className="w-3.5 h-3.5 text-white" aria-hidden="true" />
+                  <span>Pause</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
+                  <span>Play</span>
+                </>
+              )}
+            </button>
+          </div>
+        </aside>
       )}
 
       {/* 4. 3D Viewport Orientation Gizmo & Navigation Strip - only shown when scene has models */}
@@ -558,6 +671,7 @@ export default function App() {
         onLoadDemo={handleGenerateDemo}
         onLoadSampleScript={handleLoadSampleScript}
         onOpenConverter={() => setIsConverterOpen(true)}
+        onOpenThreeLive={() => setIsThreeLiveOpen(true)}
       />
 
       {/* 6. Quick Converter Bar (Docked when models are loaded, dismissable to maximize viewport) */}
@@ -593,6 +707,18 @@ export default function App() {
             models={models}
             selectedModelId={selectedModelId}
             onLoadConvertedModel={(file) => handleFilesSelected([file])}
+            onAddToast={addToast}
+          />
+        </Suspense>
+      )}
+
+      {/* 10. Three-Live Code Modal (Lazy-loaded) */}
+      {isThreeLiveOpen && (
+        <Suspense fallback={null}>
+          <ThreeLiveModal
+            isOpen={isThreeLiveOpen}
+            onClose={() => setIsThreeLiveOpen(false)}
+            onLoadThreeLive={handleLoadThreeLiveCode}
             onAddToast={addToast}
           />
         </Suspense>

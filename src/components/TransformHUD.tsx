@@ -1,5 +1,5 @@
 import React from 'react';
-import { Move, RotateCw, Maximize2, X, XCircle, Globe, Box, ArrowRightLeft } from 'lucide-react';
+import { Move, RotateCw, Maximize2, X, XCircle, Globe, Box, ArrowRightLeft, Play, Pause } from 'lucide-react';
 import { GizmoMode, TransformSpace } from '../types';
 
 interface TransformHUDProps {
@@ -11,6 +11,9 @@ interface TransformHUDProps {
   onToggleSpace: () => void;
   onDeselect: () => void;
   onOpenConverter?: () => void;
+  hasThreeLiveAnimate?: boolean;
+  isThreeLivePlaying?: boolean;
+  onToggleThreeLivePlay?: () => void;
 }
 
 export const TransformHUD: React.FC<TransformHUDProps> = ({
@@ -22,6 +25,9 @@ export const TransformHUD: React.FC<TransformHUDProps> = ({
   onToggleSpace,
   onDeselect,
   onOpenConverter,
+  hasThreeLiveAnimate,
+  isThreeLivePlaying = true,
+  onToggleThreeLivePlay,
 }) => {
   // Only display Transform HUD when a model/mesh is actively selected
   if (!hasSelection || !selectedModelName) {
@@ -144,7 +150,31 @@ export const TransformHUD: React.FC<TransformHUDProps> = ({
           </kbd>
         </button>
 
-        <div className="h-4 w-px bg-[#383838] mx-0.5" aria-hidden="true" />
+        {/* Three-Live Animation Play/Pause Control */}
+        {hasThreeLiveAnimate && onToggleThreeLivePlay && (
+          <>
+            <div className="h-4 w-px bg-[#383838] mx-0.5" aria-hidden="true" />
+            <button
+              type="button"
+              role="button"
+              onClick={onToggleThreeLivePlay}
+              aria-label={isThreeLivePlaying ? 'Pause Three-Live Animation' : 'Play Three-Live Animation'}
+              title={isThreeLivePlaying ? 'Pause Animation' : 'Play Animation'}
+              className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424] ${
+                isThreeLivePlaying
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                  : 'bg-[#383838] text-emerald-300 hover:text-white hover:bg-[#444444]'
+              }`}
+            >
+              {isThreeLivePlaying ? (
+                <Pause className="w-3.5 h-3.5 text-white" aria-hidden="true" />
+              ) : (
+                <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
+              )}
+              <span className="hidden sm:inline">{isThreeLivePlaying ? 'Pause Live' : 'Play Live'}</span>
+            </button>
+          </>
+        )}
 
         {/* Space Toggle: World / Local */}
         <button

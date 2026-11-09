@@ -9,6 +9,7 @@ interface DropzoneOverlayProps {
   onLoadDemo: () => void;
   onLoadSampleScript?: () => void;
   onOpenConverter?: () => void;
+  onOpenThreeLive?: () => void;
 }
 
 export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
@@ -18,6 +19,7 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
   onLoadDemo,
   onLoadSampleScript,
   onOpenConverter,
+  onOpenThreeLive,
 }) => {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -110,6 +112,19 @@ export const DropzoneOverlay: React.FC<DropzoneOverlayProps> = ({
                 <FileCode2 className="w-4 h-4" aria-hidden="true" />
                 <span>Select 3D Files</span>
               </button>
+              {onOpenThreeLive && (
+                <button
+                  type="button"
+                  role="button"
+                  onClick={onOpenThreeLive}
+                  aria-label="Open Three-Live code modal to paste or upload Google Three-Live scripts"
+                  title="Run Google Three-Live HTML scripts"
+                  className="bg-gradient-to-r from-blue-600/30 to-indigo-600/30 hover:from-blue-600/40 hover:to-indigo-600/40 border border-blue-500/50 text-blue-200 hover:text-white font-semibold text-xs px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 shadow-md shadow-blue-600/20"
+                >
+                  <Code2 className="w-4 h-4 text-blue-400" aria-hidden="true" />
+                  <span>Three-Live Code</span>
+                </button>
+              )}
               {onOpenConverter && (
                 <button
                   type="button"

@@ -31,6 +31,7 @@ import {
   Wrench,
   MoreHorizontal,
   ExternalLink,
+  Code2,
   X,
 } from 'lucide-react';
 import {
@@ -86,6 +87,7 @@ interface TopNavbarProps {
   onStopAnim: () => void;
   onSetAnimSpeed: (speed: number) => void;
   onOpenConverter: () => void;
+  onOpenThreeLive: () => void;
 }
 
 type OpenDropdown = 'models' | 'lighting' | 'display' | 'animation' | 'tools' | null;
@@ -135,6 +137,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onStopAnim,
   onSetAnimSpeed,
   onOpenConverter,
+  onOpenThreeLive,
 }) => {
   const [openMenu, setOpenMenu] = useState<OpenDropdown>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -867,6 +870,19 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           <span className="hidden sm:inline">Open Files</span>
         </button>
 
+        {/* Three-Live Code Runner Button */}
+        <button
+          type="button"
+          role="button"
+          onClick={onOpenThreeLive}
+          aria-label="Open Google Three-Live code modal to paste, upload, and run scripts"
+          title="Three-Live Code Runner (HTML / JS / TS)"
+          className="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-md shadow-blue-600/25 flex items-center gap-1.5 transition active:scale-95 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1 focus-visible:ring-offset-[#242424]"
+        >
+          <Code2 className="w-3.5 h-3.5" aria-hidden="true" />
+          <span>Three-Live</span>
+        </button>
+
         {/* Quick Icon-Only Action Buttons */}
         <div className="hidden lg:flex items-center gap-1 border-l border-neutral-700/60 pl-1.5" role="group" aria-label="Quick Viewport Utilities">
           {/* Theme Toggle (Light Studio vs Dark Charcoal) */}
@@ -1001,6 +1017,28 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                     </div>
                     <div className="text-[10px] text-slate-400 truncate">
                       Convert to GLB, USDZ, PLY, OBJ, STL
+                    </div>
+                  </div>
+                </button>
+
+                {/* 2. Three-Live Code Runner */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenMenu(null);
+                    onOpenThreeLive();
+                  }}
+                  className="w-full flex items-center gap-2.5 p-2 rounded-xl text-left hover:bg-neutral-800/80 transition cursor-pointer text-slate-200 hover:text-white group border border-transparent hover:border-neutral-700"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center shrink-0 border border-blue-500/30">
+                    <Code2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-xs text-white group-hover:text-blue-300 transition-colors">
+                      Three-Live Code Runner
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      Run & convert Google Three-Live HTML scripts
                     </div>
                   </div>
                 </button>
